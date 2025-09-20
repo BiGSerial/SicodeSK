@@ -1,0 +1,281 @@
+@import "tailwindcss";
+
+/* Onde o Tailwind deve escanear (v4) */
+@source "../views";
+
+/* Variant para dark (usa .dark na <html> ou <body>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* =========================================
+   1) VARIÁVEIS DE MARCA (FORA do @theme)
+   ========================================= */
+:root {
+    --sicode-body-bg: #f8fafc;
+    --sicode-font-sans: "Nunito", ui-sans-serif, system-ui, -apple-system,
+        Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji",
+        "Segoe UI Emoji", "Segoe UI Symbol";
+
+    /* Paleta SICODE */
+    --edp-primary: rgb(16, 120, 218);
+    --edp-secondary: rgb(43, 43, 43);
+    --edp-info: rgb(117, 216, 247);
+    --edp-warning: rgb(255, 230, 0);
+    --edp-danger: rgb(224, 5, 5);
+    --edp-success: rgb(9, 179, 9);
+    --edp-background: #212e3e;
+
+    --edp-verde-100: #28ff52;
+    --edp-verde-70: #52ff75;
+    --edp-verde-50: #7eff97;
+    --edp-verde-20: #a9ffba;
+
+    --edp-violeta-100: #6d32ff;
+    --edp-violeta-70: #8351ff;
+    --edp-violeta-50: #a784ff;
+    --edp-violeta-20: #c5adff;
+
+    --edp-iceblue-100: #0cd3f8;
+    --edp-iceblue-70: #3ddcf9;
+    --edp-iceblue-50: #6de5fb;
+    --edp-iceblue-20: #9eedfc;
+
+    --edp-cobaltblue-100: #263cc8;
+    --edp-cobaltblue-70: #4759d0;
+    --edp-cobaltblue-50: #7d8ade;
+    --edp-cobaltblue-20: #a8b1e9;
+
+    --edp-marineblue-100: #212e3e;
+    --edp-marineblue-70: #424d5b;
+    --edp-marineblue-50: #646d78;
+    --edp-marineblue-20: #90979f;
+
+    --edp-sprucegreen-100: #143f47;
+    --edp-sprucegreen-70: #365960;
+    --edp-sprucegreen-50: #5b797e;
+    --edp-sprucegreen-20: #8a9fa3;
+
+    --edp-seoweedgreen-100: #225e66;
+    --edp-seoweedgreen-70: #43767d;
+    --edp-seoweedgreen-50: #648e94;
+    --edp-seoweedgreen-20: #91afb3;
+
+    --edp-stategrey-100: #7c9599;
+    --edp-stategrey-70: #90a5a8;
+    --edp-stategrey-50: #a3b5b8;
+    --edp-stategrey-20: #becacc;
+
+    --edp-preto: #222222;
+    --edp-grey-10: #d2d8da;
+
+    /* Botão gradiente */
+    --edp-btn-gradiente: linear-gradient(
+        180deg,
+        rgb(13, 101, 201),
+        rgba(6, 127, 241, 0.836)
+    );
+
+    /* Tokens de acento padrão (light) */
+    --color-accent: var(--edp-primary);
+    --color-accent-content: var(--edp-primary);
+    --color-accent-foreground: #ffffff;
+}
+
+/* Overrides de dark mode (FORA do @theme) */
+.dark {
+    --color-accent: var(--edp-iceblue-100);
+    --color-accent-content: var(--edp-iceblue-100);
+    --color-accent-foreground: #0b1220;
+}
+
+/* =========================================
+   2) TOKENS DE UI + CORES TAILWIND (DENTRO do @theme)
+   ========================================= */
+@theme {
+    /* fonte base */
+    --font-sans: "Instrument Sans", var(--sicode-font-sans);
+
+    /* escala de cinzas base */
+    --color-zinc-50: #fafafa;
+    --color-zinc-100: #f5f5f5;
+    --color-zinc-200: #e5e5e5;
+    --color-zinc-300: #d4d4d4;
+    --color-zinc-400: #a3a3a3;
+    --color-zinc-500: #737373;
+    --color-zinc-600: #525252;
+    --color-zinc-700: #404040;
+    --color-zinc-800: #262626;
+    --color-zinc-900: #171717;
+    --color-zinc-950: #0a0a0a;
+
+    /* acentos (light por padrão) */
+    --color-accent: var(--edp-primary);
+    --color-accent-content: var(--edp-primary);
+    --color-accent-foreground: #ffffff;
+
+    /* superfícies (tokens de UI genéricos) */
+    --ui-bg: var(--sicode-body-bg);
+    --ui-surface: #ffffff;
+    --ui-surface-2: #f8fafc;
+    --ui-border: #e5e7eb;
+    --ui-text: #0f172a;
+    --ui-text-2: #334155;
+
+    /* === MAPA DE CORES PARA CLASSES TAILWIND ===
+     gera bg-edp-*, text-edp-* etc.
+  */
+    --color-edp-primary: var(--edp-primary);
+    --color-edp-secondary: var(--edp-secondary);
+    --color-edp-info: var(--edp-info);
+    --color-edp-warning: var(--edp-warning);
+    --color-edp-danger: var(--edp-danger);
+    --color-edp-success: var(--edp-success);
+    --color-edp-background: var(--edp-background);
+
+    --color-edp-verde-100: var(--edp-verde-100);
+    --color-edp-verde-70: var(--edp-verde-70);
+    --color-edp-verde-50: var(--edp-verde-50);
+    --color-edp-verde-20: var(--edp-verde-20);
+
+    --color-edp-violeta-100: var(--edp-violeta-100);
+    --color-edp-violeta-70: var(--edp-violeta-70);
+    --color-edp-violeta-50: var(--edp-violeta-50);
+    --color-edp-violeta-20: var(--edp-violeta-20);
+
+    --color-edp-iceblue-100: var(--edp-iceblue-100);
+    --color-edp-iceblue-70: var(--edp-iceblue-70);
+    --color-edp-iceblue-50: var(--edp-iceblue-50);
+    --color-edp-iceblue-20: var(--edp-iceblue-20);
+
+    --color-edp-cobaltblue-100: var(--edp-cobaltblue-100);
+    --color-edp-cobaltblue-70: var(--edp-cobaltblue-70);
+    --color-edp-cobaltblue-50: var(--edp-cobaltblue-50);
+    --color-edp-cobaltblue-20: var(--edp-cobaltblue-20);
+
+    --color-edp-marineblue-100: var(--edp-marineblue-100);
+    --color-edp-marineblue-70: var(--edp-marineblue-70);
+    --color-edp-marineblue-50: var(--edp-marineblue-50);
+    --color-edp-marineblue-20: var(--edp-marineblue-20);
+
+    --color-edp-sprucegreen-100: var(--edp-sprucegreen-100);
+    --color-edp-sprucegreen-70: var(--edp-sprucegreen-70);
+    --color-edp-sprucegreen-50: var(--edp-sprucegreen-50);
+    --color-edp-sprucegreen-20: var(--edp-sprucegreen-20);
+
+    --color-edp-seoweedgreen-100: var(--edp-seoweedgreen-100);
+    --color-edp-seoweedgreen-70: var(--edp-seoweedgreen-70);
+    --color-edp-seoweedgreen-50: var(--edp-seoweedgreen-50);
+    --color-edp-seoweedgreen-20: var(--edp-seoweedgreen-20);
+
+    --color-edp-stategrey-100: var(--edp-stategrey-100);
+    --color-edp-stategrey-70: var(--edp-stategrey-70);
+    --color-edp-stategrey-50: var(--edp-stategrey-50);
+    --color-edp-stategrey-20: var(--edp-stategrey-20);
+
+    --color-edp-preto: var(--edp-preto);
+    --color-edp-grey-10: var(--edp-grey-10);
+}
+
+/* Ajustes Dark (FORA do @theme) */
+.dark {
+    --ui-bg: var(--edp-marineblue-100);
+    --ui-surface: #121826;
+    --ui-surface-2: #0b1220;
+    --ui-border: #334155;
+    --ui-text: #e5e7eb;
+    --ui-text-2: #94a3b8;
+}
+
+/* =========================
+   3) Base e utilitários
+   ========================= */
+@layer base {
+    html {
+        font-family: var(--font-sans);
+    }
+
+    body {
+        background: var(--ui-bg);
+        color: var(--ui-text);
+        
+    }
+
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--ui-border, currentColor);
+    }
+}
+
+/* Botão corporativo pronto */
+@layer components {
+    .btn-brand {
+        @apply inline-flex items-center justify-center rounded-lg px-4 py-2.5 font-medium text-white shadow-md transition;
+        background: var(--edp-btn-gradiente);
+    }
+
+    .btn-brand:hover {
+        filter: brightness(0.95);
+    }
+
+    .card {
+        @apply rounded-2xl border shadow p-6;
+        background: var(--ui-surface);
+    }
+}
+
+/* === Layout stability === */
+html {
+    scrollbar-gutter: stable both-edges;
+} /* evita shift quando a barra aparece */
+
+/* === Container único do app === */
+@layer utilities {
+    .app-container {
+        max-width: 80rem; /* ~1280px, similar ao max-w-7xl */
+        margin-inline: auto;
+        padding-inline: 1rem; /* px-4 */
+    }
+    @media (min-width: 640px) {
+        .app-container {
+            padding-inline: 1.5rem;
+        }
+    } /* sm:px-6 */
+    @media (min-width: 1024px) {
+        .app-container {
+            padding-inline: 2rem;
+        }
+    } /* lg:px-8 */
+
+    /* Alturas e espaçamentos padrão */
+    .app-header {
+        height: 4rem;
+    } /* h-16 */
+    .app-main {
+        padding-block: 2rem;
+    } /* py-8 */
+    .app-footer {
+        padding-block-end: 2rem;
+    }
+
+    /* Evita “salto” por troca de fonte e imagens */
+    .img-block {
+        display: block;
+    } /* tira whitespace inline */
+}
+
+/* === Componentes estruturais === */
+@layer components {
+    .topbar {
+        @apply border-b;
+        background: #0f172a; /* mantém teu dark */
+        border-color: #2b3649;
+        width: 100%;
+    }
+    .surface {
+        @apply rounded-xl border;
+        background: #1b2535;
+        border-color: #2b3649;
+    }
+}
