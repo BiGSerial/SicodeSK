@@ -9,7 +9,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-#[Layout('layouts.app')]
+#[Layout('layouts.login')]
 class Login extends Component
 {
     #[Validate('required|email')]
@@ -63,7 +63,7 @@ class Login extends Component
         return Str::lower($this->email).'|'.request()->ip();
     }
 
-    
+
     public function render()
     {
         return view('livewire.auth.login');

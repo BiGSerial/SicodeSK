@@ -1,31 +1,145 @@
 <!doctype html>
-<html lang="pt-BR" class="h-full dark">
+<html lang="pt-BR" class="h-full w-full dark">
 
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ config('app.name', 'sicodeSK') }}</title>
 
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
+    @stack('css')
 </head>
 
 <body class="min-h-screen m-0 w-full bg-[var(--ui-bg)] text-[var(--ui-text)] antialiased">
     {{-- HEADER GLOBAL: full width de fundo; conteúdo centralizado --}}
     <header class="topbar w-full">
-        <div class="app-container app-header flex items-center justify-between">
+        <div class="app-container app-header py-3">
+            @php
+                $user = auth()->user();
+                $displayName = $user?->name ?? 'Usuário';
+                // Calcula iniciais (primeiro e último nomes, se houver)
+                $parts = preg_split('/\s+/', trim((string) $displayName), -1, PREG_SPLIT_NO_EMPTY);
+                $initials = '';
+                if ($parts && count($parts) > 0) {
+                    $initials = mb_strtoupper(mb_substr($parts[0], 0, 1));
+                    if (count($parts) > 1) {
+                        $initials .= mb_strtoupper(mb_substr($parts[count($parts) - 1], 0, 1));
+                    }
+                }
+
+                $navItems = [
+                    [
+                        'label'   => 'Dashboard',
+                        'route'   => 'dashboard',
+                        'pattern' => 'dashboard',
+                        'icon'    => '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 1.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 9h1v7a1 1 0 001 1h4a1 1 0 001-1v-4h2v4a1 1 0 001 1h4a1 1 0 001-1V9h1a1 1 0 00.707-1.707l-7-7z" /></svg>',
+                    ],
+                    [
+                        'label'   => 'Tickets',
+                        'route'   => 'tickets.index',
+                        'pattern' => 'tickets.*',
+                        'icon'    => '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2h2V5h10v2h2V5a2 2 0 00-2-2H5z" /><path d="M3 9v4a4 4 0 004 4h6a4 4 0 004-4V9H3z" /></svg>',
+                    ],
+                ];
+
+                if ($user) {
+                    $hasAdminView = \App\Models\Ticket::query()
+                        ->where(fn ($q) => $q
+                            ->where('manager_sicode_id', $user->id)
+                            ->orWhere('executor_sicode_id', $user->id))
+                        ->exists();
+
+                    if ($hasAdminView) {
+                        $navItems[] = [
+                            'label'   => 'Administração',
+                            'route'   => 'tickets.admin',
+                            'pattern' => 'tickets.admin',
+                            'icon'    => '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M11 17a1 1 0 11-2 0v-1.268a2 2 0 01.895-1.664l2.379-1.586A2 2 0 0013 11.586V9a3 3 0 10-6 0v2.586a2 2 0 00.726 1.482l2.379 1.586A2 2 0 0111 15.732V17z" /><path d="M7 5a3 3 0 116 0v.764A9.005 9.005 0 0117 14h-2a7 7 0 00-14 0H1a9.005 9.005 0 016-8.236V5z" /></svg>',
+                        ];
+                    }
+                }
+
+                $navItems = array_filter($navItems, fn ($item) => \Illuminate\Support\Facades\Route::has($item['route']));
+            @endphp
+
             @hasSection('header')
                 @yield('header')
             @else
-                <div class="flex items-center">
-                    <img src="{{ asset('img/EDP-Logo-white.svg') }}" alt="EDP" class="h-7 mr-0">
-                    <span class="text-edp-verde-100 text-lg font-semibold ml-0">sicodeSK</span>
-                </div>
-                <div class="flex items-center gap-3">
-                    @yield('actions')
+                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
+                        <a href="{{ route('dashboard') }}" class="flex items-center" wire:navigate>
+                            <img src="{{ asset('img/EDP-Logo-white.svg') }}" alt="EDP" class="h-7">
+                            <span class="text-edp-verde-100 text-lg font-semibold">sicodeSK</span>
+                        </a>
+
+                        @if (!empty($navItems))
+                            <nav aria-label="Navegação principal"
+                                class="overflow-x-auto scrollbar-thin scrollbar-thumb-[#293445] scrollbar-track-transparent">
+                                <ul class="flex items-center gap-1 md:gap-2">
+                                    @foreach ($navItems as $item)
+                                        @php
+                                            $isActive = request()->routeIs($item['pattern']);
+                                            $baseClasses = 'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-edp-iceblue-100 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f172a]';
+                                            $activeClasses = $item['highlight'] ?? false
+                                                ? 'bg-gradient-to-r from-sky-600 to-blue-700 text-white shadow'
+                                                : 'bg-[#1a2436] text-white shadow-inner';
+                                            $inactiveClasses = $item['highlight'] ?? false
+                                                ? 'text-white bg-gradient-to-r from-sky-600/80 to-blue-700/80 hover:from-sky-500 hover:to-blue-600'
+                                                : 'text-zinc-300 hover:text-white hover:bg-[#1a2436]/80';
+                                            $classes = $baseClasses . ' ' . ($isActive ? $activeClasses : $inactiveClasses);
+                                        @endphp
+                                        <li>
+                                            <a href="{{ route($item['route']) }}" wire:navigate class="{{ $classes }}"
+                                                @if ($isActive) aria-current="page" @endif>
+                                                {!! $item['icon'] !!}
+                                                <span>{{ $item['label'] }}</span>
+                                            </a>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </nav>
+                        @endif
+                    </div>
+
+                    <div class="flex items-center">
+                        @if ($user)
+                            <span class="hidden sm:block text-sm text-zinc-300 mr-2">Olá, {{ $displayName }}</span>
+
+                            {{-- Avatar de iniciais (placeholder para futuro avatar real) --}}
+                            <button type="button" class="relative inline-flex items-center gap-2">
+                                <span class="sr-only">Conta</span>
+                                <span
+                                    class="grid place-items-center h-9 w-9 rounded-full ring-1 ring-[#2b3649] bg-[#0f172a] text-edp-iceblue-100 font-semibold mr-2"
+                                    title="{{ $displayName }}" aria-label="Perfil de {{ $displayName }}">
+                                    {{ $initials ?: 'US' }}
+                                </span>
+                            </button>
+
+                            {{-- Logout (POST) --}}
+                            <form method="POST" action="{{ route('logout') }}">
+                                @csrf
+                                <button
+                                    class="rounded-lg px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-500 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 focus:ring-offset-[#0f172a]">
+                                    Sair
+                                </button>
+                            </form>
+                        @else
+                            <a href="{{ route('login') }}" class="btn-brand" wire:navigate>Entrar</a>
+                        @endif
+                    </div>
                 </div>
             @endif
         </div>
+
+        @hasSection('breadcrumb')
+            <div class="app-container py-2 border-t border-zinc-700/50">
+                <div class="flex items-center text-sm text-zinc-400">
+                    @yield('breadcrumb')
+                </div>
+            </div>
+        @endif
     </header>
 
     {{-- MAIN (container sem cor) --}}
@@ -44,6 +158,21 @@
     @livewireScripts
     @stack('modals')
     @stack('scripts')
+
+    @if (session('status'))
+        <script>
+            window.addEventListener('load', () => {
+                window.dispatchEvent(new CustomEvent('sweet-alert', {
+                    detail: {
+                        type: 'success',
+                        title: 'Tudo certo!',
+                        text: @json(session('status')),
+                        toast: true,
+                    }
+                }));
+            });
+        </script>
+    @endif
 </body>
 
 </html>

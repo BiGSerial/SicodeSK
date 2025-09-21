@@ -18,6 +18,9 @@ class DatabaseSeeder extends Seeder
         $this->call([
             TicketDemoSeeder::class,
             WorkflowDemoSeeder::class,
+            TicketSeeder::class,
+            TicketEventSeeder::class,
+            TicketCommentSeeder::class,
         ]);
     }
 }

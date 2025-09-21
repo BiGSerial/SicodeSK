@@ -4,6 +4,8 @@ namespace App\Livewire\Tickets;
 
 use App\Models\Area;
 use App\Models\Ticket;
+use App\Support\Concerns\WildcardFormatter;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -14,13 +16,13 @@ use Livewire\WithPagination;
 class Index extends Component
 {
     use WithPagination;
+    use WildcardFormatter;
 
     // Filtros
     public ?int $areaId = null;
     public ?string $status = null;     // open|in_progress|paused|resolved|closed
     public ?string $priority = null;   // low|medium|high|urgent
     public string $search = '';
-    public bool $onlyMine = false;
     public bool $onlyLate = false;
 
     public int $perPage = 20;
@@ -30,16 +32,17 @@ class Index extends Component
         'status'    => ['except' => null],
         'priority'  => ['except' => null],
         'search'    => ['except' => ''],
-        'onlyMine'  => ['except' => false],
         'onlyLate'  => ['except' => false],
         'page'      => ['except' => 1],
         'perPage'   => ['except' => 20],
     ];
 
-    public function updating($prop): void
+    public function updated($prop): void
     {
+
+
         // sempre que mudar filtro, volta para página 1
-        if (in_array($prop, ['areaId','status','priority','search','onlyMine','onlyLate','perPage'])) {
+        if (in_array($prop, ['areaId','status','priority','search','onlyLate','perPage'])) {
             $this->resetPage();
         }
     }
@@ -47,26 +50,28 @@ class Index extends Component
     public function clearFilters(): void
     {
         $this->reset([
-            'areaId','status','priority','search','onlyMine','onlyLate','perPage'
+            'areaId','status','priority','search','onlyLate','perPage'
         ]);
         $this->perPage = 20;
     }
 
     public function getRows()
     {
+        $userId = Auth::id();
+
         $q = Ticket::query()
-            ->with(['area:id,name','type:id,name']) // ajuste de relações no Model (area, type)
+            ->where('requester_sicode_id', $userId)
+            ->with(['area:id,name', 'type:id,name']) // ajuste de relações no Model (area, type)
             ->when($this->areaId, fn ($qq) => $qq->where('area_id', $this->areaId))
             ->when($this->status, fn ($qq) => $qq->where('status', $this->status))
             ->when($this->priority, fn ($qq) => $qq->where('priority', $this->priority))
-            ->when($this->onlyMine, fn ($qq) => $qq->where('executor_sicode_id', Auth::id()))
-            ->when($this->onlyMine, fn ($qq) => $qq->where('executor_sicode_id', $this->sicodeUuid()))
-            ->when(strlen($this->search) > 0, function ($qq) {
-                // Postgres friendly: ILIKE em título/descrição (pode trocar por full-text com GIN depois)
-                $term = '%'.str_replace('%', '\%', $this->search).'%';
-                $qq->where(function ($w) use ($term) {
-                    $w->where('title', 'ILIKE', $term)
-                      ->orWhere('description', 'ILIKE', $term);
+            ->when($this->onlyLate, fn ($qq) => $qq->where('is_late', true))
+            ->when($wildcard = $this->formatWildcard($this->search, false), function (Builder $query) use ($wildcard) {
+
+                $query->where(function (Builder $sub) use ($wildcard) {
+                    $sub->where('code', $wildcard->type, $wildcard->term)
+                        ->orWhere('title', $wildcard->type, $wildcard->term)
+                        ->orWhere('description', $wildcard->type, $wildcard->term);
                 });
             })
             ->latest('updated_at');

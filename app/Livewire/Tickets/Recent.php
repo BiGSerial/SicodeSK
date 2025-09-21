@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Tickets;
 
+use App\Models\Ticket;
+use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
 class Recent extends Component
@@ -10,12 +12,51 @@ class Recent extends Component
 
     public function mount(): void
     {
-        // TODO: depois trocar por consulta no Postgres (sicodesk)
-        $this->items = [
-            ['key' => 'CIP-234', 'title' => 'Acesso ao repositório',          'meta' => 'Aberto • Prioridade: Média • SLA: 24h', 'badge' => ['label' => 'Em andamento', 'class' => 'bg-edp-marineblue-70/40 border border-[#2b3649]']],
-            ['key' => 'CIP-233', 'title' => 'Erro no painel de indicadores',  'meta' => 'Aberto • Prioridade: Alta • SLA: 8h',   'badge' => ['label' => 'Atrasado',     'class' => 'bg-red-900/40 border border-red-800 text-red-200']],
-            ['key' => 'CIP-232', 'title' => 'Solicitação de criação de usuário','meta' => 'Fechado • Prioridade: Baixa',        'badge' => ['label' => 'Concluído',    'class' => 'bg-emerald-900/30 border border-emerald-800 text-emerald-200']],
-        ];
+        $user = Auth::user();
+        $sicodeId = $user?->id; // UUID do usuário (requester)
+
+        // Buscar últimos 5 tickets do usuário logado
+        $tickets = Ticket::query()
+            ->where('requester_sicode_id', $sicodeId)
+            ->latest('created_at')
+            ->take(5)
+            ->get();
+
+        // Mapear para o mesmo formato que sua view espera
+        $this->items = $tickets->map(function ($t) {
+            return [
+                'key'   => $t->code,
+                'title' => $t->title,
+                'meta'  => ucfirst($t->status) . ' • Prioridade: ' . ucfirst($t->priority) .
+                          ($t->sla_due_at ? ' • SLA: ' . $t->sla_due_at->diffForHumans() : ''),
+                'badge' => $this->badgeFor($t->status, $t->is_late),
+            ];
+        })->toArray();
+    }
+
+    protected function badgeFor(string $status, bool $isLate): array
+    {
+        if ($isLate) {
+            return [
+                'label' => 'Atrasado',
+                'class' => 'bg-red-900/40 border border-red-800 text-red-200',
+            ];
+        }
+
+        return match ($status) {
+            'open', 'in_progress' => [
+                'label' => 'Em andamento',
+                'class' => 'bg-edp-marineblue-70/40 border border-[#2b3649]',
+            ],
+            'resolved', 'closed' => [
+                'label' => 'Concluído',
+                'class' => 'bg-emerald-900/30 border border-emerald-800 text-emerald-200',
+            ],
+            default => [
+                'label' => ucfirst($status),
+                'class' => 'bg-zinc-700/40 border border-zinc-600 text-zinc-200',
+            ],
+        };
     }
 
     public function render()

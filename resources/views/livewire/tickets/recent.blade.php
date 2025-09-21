@@ -8,10 +8,12 @@
         @forelse ($items as $t)
             <li class="px-4 py-3 flex items-center justify-between">
                 <div>
-                    <p class="font-medium">[{{ $t['key'] }}] {{ $t['title'] }}</p>
+                    <p class="font-medium"><span class="text-edp-verde-70">[{{ $t['key'] }}]</span>
+                        {{ $t['title'] }}</p>
                     <p class="text-xs text-zinc-400">{{ $t['meta'] }}</p>
                 </div>
-                <span class="text-xs rounded-full px-2 py-1 {{ $t['badge']['class'] }}">{{ $t['badge']['label'] }}</span>
+                <span
+                    class="text-xs rounded-full px-2 py-1 {{ $t['badge']['class'] }}">{{ $t['badge']['label'] }}</span>
             </li>
         @empty
             <li class="px-4 py-8 text-zinc-400 text-center">Nenhum ticket por aqui…</li>

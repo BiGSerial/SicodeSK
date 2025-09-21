@@ -199,6 +199,10 @@
         margin: 0;
     }
 
+    [x-cloak] {
+        display: none !important;
+    }
+
     *,
     ::after,
     ::before,
