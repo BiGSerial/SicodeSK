@@ -3,6 +3,7 @@
 namespace App\Livewire\Tickets;
 
 use App\Models\Area;
+use App\Models\Priority;
 use App\Models\Ticket;
 use App\Support\Concerns\WildcardFormatter;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,7 +22,7 @@ class Index extends Component
     // Filtros
     public ?int $areaId = null;
     public ?string $status = null;     // open|in_progress|paused|resolved|closed
-    public ?string $priority = null;   // low|medium|high|urgent
+    public ?int $priorityId = null;
     public string $search = '';
     public bool $onlyLate = false;
 
@@ -30,7 +31,7 @@ class Index extends Component
     protected $queryString = [
         'areaId'    => ['except' => null],
         'status'    => ['except' => null],
-        'priority'  => ['except' => null],
+        'priorityId'  => ['except' => null],
         'search'    => ['except' => ''],
         'onlyLate'  => ['except' => false],
         'page'      => ['except' => 1],
@@ -42,7 +43,7 @@ class Index extends Component
 
 
         // sempre que mudar filtro, volta para página 1
-        if (in_array($prop, ['areaId','status','priority','search','onlyLate','perPage'])) {
+        if (in_array($prop, ['areaId','status','priorityId','search','onlyLate','perPage'])) {
             $this->resetPage();
         }
     }
@@ -50,9 +51,14 @@ class Index extends Component
     public function clearFilters(): void
     {
         $this->reset([
-            'areaId','status','priority','search','onlyLate','perPage'
+            'areaId','status','priorityId','search','onlyLate','perPage'
         ]);
         $this->perPage = 20;
+    }
+
+    public function updatedPriorityId($value): void
+    {
+        $this->priorityId = $value !== '' ? (int) $value : null;
     }
 
     public function getRows()
@@ -61,10 +67,10 @@ class Index extends Component
 
         $q = Ticket::query()
             ->where('requester_sicode_id', $userId)
-            ->with(['area:id,name', 'type:id,name']) // ajuste de relações no Model (area, type)
+            ->with(['area:id,name', 'type:id,name', 'priority:id,name,slug,color'])
             ->when($this->areaId, fn ($qq) => $qq->where('area_id', $this->areaId))
             ->when($this->status, fn ($qq) => $qq->where('status', $this->status))
-            ->when($this->priority, fn ($qq) => $qq->where('priority', $this->priority))
+            ->when($this->priorityId, fn ($qq) => $qq->where('priority_id', $this->priorityId))
             ->when($this->onlyLate, fn ($qq) => $qq->where('is_late', true))
             ->when($wildcard = $this->formatWildcard($this->search, false), function (Builder $query) use ($wildcard) {
 
@@ -82,9 +88,18 @@ class Index extends Component
     public function render()
     {
         return view('livewire.tickets.index', [
-            'areas'   => Area::orderBy('name')->get(['id','name']),
-            'tickets' => $this->getRows(),
-            'now'     => Carbon::now(),
+            'areas'      => Area::orderBy('name')->get(['id','name']),
+            'tickets'    => $this->getRows(),
+            'priorities' => $this->priorities(),
+            'now'        => Carbon::now(),
         ]);
+    }
+
+    private function priorities()
+    {
+        return Priority::query()
+            ->orderByDesc('weight')
+            ->orderBy('name')
+            ->get(['id','name','slug','color']);
     }
 }

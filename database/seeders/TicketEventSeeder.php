@@ -18,7 +18,7 @@ class TicketEventSeeder extends Seeder
                 'ticket_id'        => 1,
                 'actor_sicode_id'  => '11111111-1111-1111-1111-111111111111',
                 'type'             => 'created',
-                'payload_json'     => json_encode(['priority' => 'medium']),
+                'payload_json'     => json_encode(['priority_slug' => 'medium']),
                 'created_at'       => $now,
                 'updated_at'       => $now,
             ],

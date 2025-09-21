@@ -18,16 +18,18 @@ class Recent extends Component
         // Buscar últimos 5 tickets do usuário logado
         $tickets = Ticket::query()
             ->where('requester_sicode_id', $sicodeId)
+            ->with(['priority:id,name,slug'])
             ->latest('created_at')
             ->take(5)
             ->get();
 
         // Mapear para o mesmo formato que sua view espera
         $this->items = $tickets->map(function ($t) {
+            $priority = $t->priority?->name;
             return [
                 'key'   => $t->code,
                 'title' => $t->title,
-                'meta'  => ucfirst($t->status) . ' • Prioridade: ' . ucfirst($t->priority) .
+                'meta'  => ucfirst($t->status) . ($priority ? ' • Prioridade: ' . $priority : '') .
                           ($t->sla_due_at ? ' • SLA: ' . $t->sla_due_at->diffForHumans() : ''),
                 'badge' => $this->badgeFor($t->status, $t->is_late),
             ];

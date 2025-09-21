@@ -14,6 +14,7 @@ use Illuminate\Validation\Rule;
 // Models que já assumimos existir no sicodeSK (Postgres):
 use App\Models\Area;
 use App\Models\Category;
+use App\Models\Priority;
 use App\Models\Subcategory;
 use App\Models\TicketType;
 use App\Models\Ticket;
@@ -36,7 +37,7 @@ class CreateWizard extends Component
     public ?int $ticketTypeId = null;
     public ?int $categoryId = null;
     public ?int $subcategoryId = null;
-    public string $priority = 'medium'; // low|medium|high|urgent
+    public ?int $priorityId = null;
 
     /** Content */
     public string $title = '';
@@ -47,6 +48,7 @@ class CreateWizard extends Component
     public array $ticketTypes = [];
     public array $categories = [];
     public array $subcategories = [];
+    public array $priorities = [];
 
     /** Preview */
     public ?string $slaPreview = null;
@@ -59,6 +61,7 @@ class CreateWizard extends Component
     public function mount(): void
     {
         $this->loadAreas();
+        $this->loadPriorities();
     }
 
     /* ---------- Loaders ---------- */
@@ -71,6 +74,30 @@ class CreateWizard extends Component
             ->get(['id','name'])
             ->map(fn ($a) => ['id' => $a->id,'name' => $a->name])
             ->toArray();
+    }
+
+    protected function loadPriorities(): void
+    {
+        $collection = Priority::query()
+            ->where('active', true)
+            ->orderByDesc('weight')
+            ->orderBy('name')
+            ->get(['id','name','slug','color','is_default']);
+
+        $this->priorities = $collection->map(function ($priority) {
+            return [
+                'id' => $priority->id,
+                'name' => $priority->name,
+                'slug' => $priority->slug,
+                'color' => $priority->color,
+                'is_default' => $priority->is_default,
+            ];
+        })->toArray();
+
+        if (!$this->priorityId && $collection->isNotEmpty()) {
+            $default = $collection->firstWhere('is_default', true) ?? $collection->first();
+            $this->priorityId = $default?->id;
+        }
     }
 
     public function updatedAreaId(): void
@@ -122,7 +149,7 @@ class CreateWizard extends Component
         $this->computeSlaPreview();
     }
 
-    public function updatedPriority(): void
+    public function updatedPriorityId(): void
     {
         $this->computeSlaPreview();
     }
@@ -157,7 +184,11 @@ class CreateWizard extends Component
             $this->validate([
                 'categoryId' => ['nullable', Rule::exists('categories', 'id')],
                 'subcategoryId' => ['nullable', Rule::exists('subcategories', 'id')->where('category_id', $this->categoryId)],
-                'priority' => ['required', Rule::in(['low','medium','high','urgent'])],
+                'priorityId' => ['required', Rule::exists('priorities', 'id')->where('active', true)],
+            ], [], [
+                'categoryId' => 'categoria',
+                'subcategoryId' => 'subcategoria',
+                'priorityId' => 'prioridade',
             ]);
         }
 
@@ -172,11 +203,13 @@ class CreateWizard extends Component
 
     /* ---------- SLA (preview e cálculo) ---------- */
 
-    protected function computeSlaMinutes(string $priority, ?int $areaId, ?int $ticketTypeId): int
+    protected function computeSlaMinutes(int $priorityId, ?int $areaId, ?int $ticketTypeId): int
     {
-        // TODO: consultar sla_matrices e/ou overrides por area/tipo
-        // Fallback simples:
-        return match ($priority) {
+        $priority = Priority::find($priorityId);
+        $slug = $priority?->slug ?? 'medium';
+
+        // TODO: substituir por consulta às tabelas de SLA parametrizadas
+        return match ($slug) {
             'low'    => 48 * 60,
             'medium' => 24 * 60,
             'high'   => 8  * 60,
@@ -187,12 +220,12 @@ class CreateWizard extends Component
 
     protected function computeSlaPreview(): void
     {
-        if (!$this->priority || !$this->areaId || !$this->ticketTypeId) {
+        if (!$this->priorityId || !$this->areaId || !$this->ticketTypeId) {
             $this->slaPreview = null;
             return;
         }
 
-        $mins = $this->computeSlaMinutes($this->priority, $this->areaId, $this->ticketTypeId);
+        $mins = $this->computeSlaMinutes($this->priorityId, $this->areaId, $this->ticketTypeId);
         $hours = intdiv($mins, 60);
         $rest = $mins % 60;
         $this->slaPreview = $rest ? "{$hours}h {$rest}m" : "{$hours}h";
@@ -209,14 +242,17 @@ class CreateWizard extends Component
         $user = Auth::user(); // SicodeUser (MariaDB)
         $requesterSicodeId = $user->id; // uuid
 
-        $slaMinutes = $this->computeSlaMinutes($this->priority, $this->areaId, $this->ticketTypeId);
+        $slaMinutes = $this->computeSlaMinutes($this->priorityId, $this->areaId, $this->ticketTypeId);
         $dueAt = now()->addMinutes($slaMinutes);
+
+        $selectedPriority = $this->priorityId ? Priority::find($this->priorityId) : null;
+        $prioritySlug = $selectedPriority?->slug;
 
         $pendingUploads = $this->pendingAttachments;
 
         $ticket = null;
 
-        DB::connection('pgsql')->transaction(function () use (&$ticket, $requesterSicodeId, $dueAt) {
+        DB::connection('pgsql')->transaction(function () use (&$ticket, $requesterSicodeId, $dueAt, $selectedPriority, $prioritySlug) {
             // (opcional) workflow por área
             $workflowId = Workflow::query()
                 ->where('area_id', $this->areaId)
@@ -243,8 +279,7 @@ class CreateWizard extends Component
                 'subcategory_id'      => $this->subcategoryId,
                 'workflow_id'         => $workflowId,
                 'step_id'             => $firstStepId,
-
-                'priority'            => $this->priority,
+                'priority_id'         => $selectedPriority?->id,
                 'title'               => $this->title,
                 'description'         => $this->description,
                 'status'              => 'open',
@@ -264,7 +299,8 @@ class CreateWizard extends Component
                 'type'             => 'created',
                 'payload_json'     => json_encode([
                     'code' => $code, // útil no histórico
-                    'priority' => $this->priority,
+                    'priority_id' => $selectedPriority?->id,
+                    'priority_slug' => $prioritySlug,
                     'area_id'  => $this->areaId,
                     'ticket_type_id' => $this->ticketTypeId,
                 ]),

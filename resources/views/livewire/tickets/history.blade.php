@@ -8,13 +8,6 @@
         'closed' => 'Fechado',
     ];
 
-    $priorityOptions = [
-        '' => 'Qualquer',
-        'low' => 'Baixa',
-        'medium' => 'Média',
-        'high' => 'Alta',
-        'urgent' => 'Urgente',
-    ];
 @endphp
 
 <div class="text-zinc-100">
@@ -63,10 +56,11 @@
                 </div>
                 <div>
                     <label class="block text-zinc-300 mb-1">Prioridade</label>
-                    <select wire:model.live="priority"
+                    <select wire:model.live="priorityId"
                         class="w-full rounded-lg border border-[#334155] bg-[#0f172a] px-3 py-2 text-zinc-100">
-                        @foreach ($priorityOptions as $value => $label)
-                            <option value="{{ $value }}">{{ $label }}</option>
+                        <option value="">Qualquer</option>
+                        @foreach ($priorities as $priority)
+                            <option value="{{ $priority->id }}">{{ $priority->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -153,28 +147,29 @@
                         @if ($tickets->count())
                             <div wire:transition>
                                 @foreach ($tickets as $ticket)
-                                    @php
-                                        $status = $ticket->status ?? 'unknown';
-                                        $statusLabel = ucfirst(str_replace('_', ' ', $status));
-                                        $statusClass = match ($status) {
-                                            'open' => 'bg-sky-700/30 text-sky-300 border-sky-700/60',
-                                            'in_progress' => 'bg-indigo-700/30 text-indigo-300 border-indigo-700/60',
-                                            'paused' => 'bg-zinc-700/30 text-zinc-200 border-zinc-700/60',
-                                            'resolved' => 'bg-emerald-700/30 text-emerald-300 border-emerald-700/60',
-                                            'closed' => 'bg-zinc-800/60 text-zinc-400 border-zinc-700/60',
-                                            default => 'bg-zinc-700/30 text-zinc-200 border-zinc-700/60',
-                                        };
+                            @php
+                                $status = $ticket->status ?? 'unknown';
+                                $statusLabel = ucfirst(str_replace('_', ' ', $status));
+                                $statusClass = match ($status) {
+                                    'open' => 'bg-sky-700/30 text-sky-300 border-sky-700/60',
+                                    'in_progress' => 'bg-indigo-700/30 text-indigo-300 border-indigo-700/60',
+                                    'paused' => 'bg-zinc-700/30 text-zinc-200 border-zinc-700/60',
+                                    'resolved' => 'bg-emerald-700/30 text-emerald-300 border-emerald-700/60',
+                                    'closed' => 'bg-zinc-800/60 text-zinc-400 border-zinc-700/60',
+                                    default => 'bg-zinc-700/30 text-zinc-200 border-zinc-700/60',
+                                };
 
-                                        $priority = $ticket->priority ?? null;
-                                        $priorityLabel = $priority ? ucfirst($priority) : '—';
-                                        $priorityClass = match ($priority) {
-                                            'low' => 'bg-emerald-700/30 text-emerald-300 border-emerald-700/60',
-                                            'medium' => 'bg-sky-700/30 text-sky-300 border-sky-700/60',
-                                            'high' => 'bg-amber-700/30 text-amber-300 border-amber-700/60',
-                                            'urgent' => 'bg-rose-700/30 text-rose-300 border-rose-700/60',
-                                            default => 'bg-zinc-700/30 text-zinc-200 border-zinc-700/60',
-                                        };
-                                    @endphp
+                                $priority = $ticket->priority;
+                                $priorityLabel = $priority?->name ?? '—';
+                                $prioritySlug = $priority?->slug;
+                                $priorityClass = match ($prioritySlug) {
+                                    'low' => 'bg-emerald-700/30 text-emerald-300 border-emerald-700/60',
+                                    'medium' => 'bg-sky-700/30 text-sky-300 border-sky-700/60',
+                                    'high' => 'bg-amber-700/30 text-amber-300 border-amber-700/60',
+                                    'urgent' => 'bg-rose-700/30 text-rose-300 border-rose-700/60',
+                                    default => 'bg-zinc-700/30 text-zinc-200 border-zinc-700/60',
+                                };
+                            @endphp
                                     <tr class="border-b border-[#2b3649] hover:bg-[#1f2940]">
                                         <td class="px-4 py-2 whitespace-nowrap font-mono text-zinc-100">
                                             {{ $ticket->code }}

@@ -26,7 +26,10 @@
             </div>
             <div class="flex items-center gap-2">
                 @php
-                    $priorityClass = match ($ticket->priority) {
+                    $priority = $ticket->priority;
+                    $prioritySlug = $priority?->slug;
+                    $priorityName = $priority?->name ?? '—';
+                    $priorityClass = match ($prioritySlug) {
                         'low' => 'bg-emerald-700/30 text-emerald-300 border-emerald-700/60',
                         'medium' => 'bg-sky-700/30 text-sky-300 border-sky-700/60',
                         'high' => 'bg-amber-700/30 text-amber-300 border-amber-700/60',
@@ -43,7 +46,7 @@
                     };
                 @endphp
                 <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs {{ $priorityClass }}">
-                    Prioridade: {{ ucfirst($ticket->priority) }}
+                    Prioridade: {{ $priorityName }}
                 </span>
                 <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs {{ $statusClass }}">
                     Status: {{ ucfirst(str_replace('_', ' ', $ticket->status)) }}

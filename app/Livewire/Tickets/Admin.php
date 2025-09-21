@@ -3,8 +3,10 @@
 namespace App\Livewire\Tickets;
 
 use App\Models\Area;
+use App\Models\Priority;
 use App\Models\Ticket;
 use App\Support\Concerns\WildcardFormatter;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -20,7 +22,7 @@ class Admin extends Component
 
     public ?int $areaId = null;
     public ?string $status = null;
-    public ?string $priority = null;
+    public ?int $priorityId = null;
     public string $search = '';
     public bool $onlyLate = false;
     public string $mode = 'gestao'; // gestao|executor
@@ -30,16 +32,48 @@ class Admin extends Component
         'mode' => ['except' => 'gestao'],
         'areaId' => ['except' => null],
         'status' => ['except' => null],
-        'priority' => ['except' => null],
+        'priorityId' => ['except' => null],
         'search' => ['except' => ''],
         'onlyLate' => ['except' => false],
         'page' => ['except' => 1],
         'perPage' => ['except' => 20],
     ];
 
+    public function mount(): void
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            throw new AuthorizationException();
+        }
+
+        $requestedMode = in_array($this->mode, ['gestao', 'executor'], true) ? $this->mode : null;
+
+        if ($this->isSuperadm()) {
+            $this->mode = $requestedMode ?? 'gestao';
+            return;
+        }
+
+        $userId = (string) $user->id;
+
+        $manages = Ticket::query()->where('manager_sicode_id', $userId)->exists();
+        $executes = Ticket::query()->where('executor_sicode_id', $userId)->exists();
+
+        if (!$manages && !$executes) {
+            throw new AuthorizationException();
+        }
+
+        if ($requestedMode && ($requestedMode === 'gestao' ? $manages : $executes)) {
+            $this->mode = $requestedMode;
+            return;
+        }
+
+        $this->mode = $manages ? 'gestao' : 'executor';
+    }
+
     public function updating($prop): void
     {
-        if (in_array($prop, ['mode', 'areaId', 'status', 'priority', 'search', 'onlyLate', 'perPage'])) {
+        if (in_array($prop, ['mode', 'areaId', 'status', 'priorityId', 'search', 'onlyLate', 'perPage'])) {
             $this->resetPage();
         }
     }
@@ -47,6 +81,10 @@ class Admin extends Component
     public function setMode(string $mode): void
     {
         if (!in_array($mode, ['gestao', 'executor'], true)) {
+            return;
+        }
+
+        if ($this->mode === $mode) {
             return;
         }
 
@@ -59,7 +97,7 @@ class Admin extends Component
         $this->reset([
             'areaId',
             'status',
-            'priority',
+            'priorityId',
             'search',
             'onlyLate',
             'perPage',
@@ -69,12 +107,18 @@ class Admin extends Component
         $this->resetPage();
     }
 
+    public function updatedPriorityId($value): void
+    {
+        $this->priorityId = $value !== '' ? (int) $value : null;
+    }
+
     public function render()
     {
         return view('livewire.tickets.admin', [
             'areas' => $this->areas(),
             'tickets' => $this->tickets(),
             'metrics' => $this->metrics(),
+            'priorities' => $this->priorities(),
             'now' => Carbon::now(),
         ]);
     }
@@ -119,7 +163,8 @@ class Admin extends Component
 
     private function baseQuery(): Builder
     {
-        $userId = Auth::id();
+        $user = Auth::user();
+        $userId = $user?->id;
 
         $query = Ticket::query()
             ->with([
@@ -127,25 +172,48 @@ class Admin extends Component
                 'type:id,name',
                 'requester:id,name',
                 'executor:id,name',
+                'priority:id,name,slug,color',
             ])
-            ->when($this->mode === 'gestao', function (Builder $builder) use ($userId) {
-                $builder->where('manager_sicode_id', $userId);
-            }, function (Builder $builder) use ($userId) {
-                $builder->where('executor_sicode_id', $userId);
+            ->when(!$this->isSuperadm(), function (Builder $builder) use ($userId) {
+                if ($this->mode === 'gestao') {
+                    $builder->where('manager_sicode_id', $userId);
+                } else {
+                    $builder->where('executor_sicode_id', $userId);
+                }
             })
             ->when($this->areaId, fn ($builder) => $builder->where('area_id', $this->areaId))
             ->when($this->status, fn ($builder) => $builder->where('status', $this->status))
-            ->when($this->priority, fn ($builder) => $builder->where('priority', $this->priority))
+            ->when($this->priorityId, fn ($builder) => $builder->where('priority_id', $this->priorityId))
             ->when($this->onlyLate, fn ($builder) => $builder->where('is_late', true))
             ->when($wildcard = $this->formatWildcard($this->search, false), function (Builder $builder) use ($wildcard) {
                 $builder->where(function (Builder $sub) use ($wildcard) {
-                    $sub->where('code', $wildcard->type, $wildcard->term)
-                        ->orWhere('title', $wildcard->type, $wildcard->term)
-                        ->orWhere('description', $wildcard->type, $wildcard->term);
+                    $term = $wildcard->term;
+                    if ($wildcard->type === 'LIKE' && !str_contains($term, '%')) {
+                        $term = "%{$term}%";
+                    }
+
+                    $sub->where('code', $wildcard->type, $term)
+                        ->orWhere('title', $wildcard->type, $term)
+                        ->orWhere('description', $wildcard->type, $term);
                 });
             })
             ->latest('updated_at');
 
         return $query;
+    }
+
+    private function isSuperadm(): bool
+    {
+        $user = Auth::user();
+
+        return (bool) ($user->superadm ?? false);
+    }
+
+    private function priorities()
+    {
+        return Priority::query()
+            ->orderByDesc('weight')
+            ->orderBy('name')
+            ->get(['id','name','slug','color']);
     }
 }

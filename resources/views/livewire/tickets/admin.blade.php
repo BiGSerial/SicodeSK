@@ -70,13 +70,12 @@
                 </div>
                 <div>
                     <label class="mb-1 block text-zinc-300">Prioridade</label>
-                    <select wire:model.live="priority"
+                    <select wire:model.live="priorityId"
                         class="w-full rounded-lg border border-[#334155] bg-[#0f172a] px-3 py-2 text-zinc-100">
                         <option value="">Qualquer</option>
-                        <option value="low">Baixa</option>
-                        <option value="medium">Média</option>
-                        <option value="high">Alta</option>
-                        <option value="urgent">Urgente</option>
+                        @foreach ($priorities as $priority)
+                            <option value="{{ $priority->id }}">{{ $priority->name }}</option>
+                        @endforeach
                     </select>
                 </div>
                 <div>
@@ -124,6 +123,7 @@
                             <th class="px-4 py-2 text-left">Área / Tipo</th>
                             <th class="px-4 py-2 text-left">Solicitante</th>
                             <th class="px-4 py-2 text-left">Executor</th>
+                            <th class="px-4 py-2 text-left">Prioridade</th>
                             <th class="px-4 py-2 text-left">Status</th>
                             <th class="px-4 py-2 text-left">SLA</th>
                             <th class="px-4 py-2 text-left">Atualizado</th>
@@ -205,6 +205,22 @@
                                     {{ $ticket->executor->name ?? '—' }}
                                 </td>
                                 <td class="px-4 py-2">
+                                    @php
+                                        $priority = $ticket->priority;
+                                        $prioritySlug = $priority?->slug;
+                                        $priorityClass = match ($prioritySlug) {
+                                            'low' => 'bg-emerald-700/30 text-emerald-300 border-emerald-700/60',
+                                            'medium' => 'bg-sky-700/30 text-sky-300 border-sky-700/60',
+                                            'high' => 'bg-amber-700/30 text-amber-300 border-amber-700/60',
+                                            'urgent' => 'bg-rose-700/30 text-rose-300 border-rose-700/60',
+                                            default => 'bg-zinc-700/30 text-zinc-200 border-zinc-700/60',
+                                        };
+                                    @endphp
+                                    <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs {{ $priorityClass }}">
+                                        {{ $priority?->name ?? '—' }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2">
                                     <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs {{ $statusClass }}">
                                         {{ $statusLabel }}
                                     </span>
@@ -224,7 +240,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9" class="px-4 py-8 text-center text-sm text-zinc-400">
+                                <td colspan="10" class="px-4 py-8 text-center text-sm text-zinc-400">
                                     Nenhum ticket encontrado para os filtros atuais.
                                 </td>
                             </tr>
@@ -240,4 +256,6 @@
             @endif
         </section>
     </main>
+
+    <x-loading.status target="areaId,status,priorityId,search,onlyLate,perPage,mode" text="Carregando visão administrativa...<br>aguarde um instante." />
 </div>

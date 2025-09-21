@@ -128,15 +128,22 @@
 
                         <div>
                             <label class="block text-sm text-zinc-300 mb-1">Prioridade</label>
-                            <div class="grid grid-cols-4 gap-2">
-                                @foreach (['low', 'medium', 'high', 'urgent'] as $p)
-                                    <button type="button" wire:click="$set('priority','{{ $p }}')"
-                                        class="rounded-lg border px-3 py-2 text-sm {{ $priority === $p ? 'border-edp-iceblue-100 bg-[#0f172a]' : 'border-[#334155] bg-[#0f172a] opacity-80 hover:opacity-100' }}">
-                                        {{ ucfirst($p) }}
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                @foreach ($priorities as $priorityOption)
+                                    @php
+                                        $active = (int) $priorityId === (int) $priorityOption['id'];
+                                    @endphp
+                                    <button type="button" wire:click="$set('priorityId', {{ $priorityOption['id'] }})"
+                                        class="rounded-lg border px-3 py-2 text-sm transition {{ $priorityId == $priorityOption['id'] ? 'border-edp-iceblue-100 bg-edp-iceblue-100/20 text-edp-iceblue-100 shadow' : 'border-[#334155] bg-[#0f172a] text-zinc-300 hover:border-edp-iceblue-100/60 hover:text-edp-iceblue-100' }}">
+                                        <span class="inline-flex items-center gap-2">
+                                            <span class="inline-block h-2.5 w-2.5 rounded-full"
+                                                style="background-color: {{ $priorityOption['color'] ?? ($priorityId == $priorityOption['id'] ? '#38bdf8' : '#22d3ee') }}"></span>
+                                            {{ $priorityOption['name'] }}
+                                        </span>
                                     </button>
                                 @endforeach
                             </div>
-                            @error('priority')
+                            @error('priorityId')
                                 <p class="text-sm text-red-400 mt-1">{{ $message }}</p>
                             @enderror
                         </div>
@@ -167,22 +174,21 @@
                         </div>
 
                         <div x-data="{
-                                isDropping: false,
-                                handleDrop(event) {
-                                    this.isDropping = false;
-                                    const files = event.dataTransfer.files;
-                                    if (files && files.length) {
-                                        this.$refs.fileInput.files = files;
-                                        this.$refs.fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                                    }
+                            isDropping: false,
+                            handleDrop(event) {
+                                this.isDropping = false;
+                                const files = event.dataTransfer.files;
+                                if (files && files.length) {
+                                    this.$refs.fileInput.files = files;
+                                    this.$refs.fileInput.dispatchEvent(new Event('change', { bubbles: true }));
                                 }
-                            }"
-                            class="space-y-3">
+                            }
+                        }" class="space-y-3">
                             <label class="block text-sm text-zinc-300">Anexos</label>
                             <div @dragover.prevent="isDropping = true" @dragleave.prevent="isDropping = false"
-                                @drop.prevent="handleDrop($event)"
-                                @click="$refs.fileInput.click()"
-                                :class="isDropping ? 'border-edp-iceblue-100 bg-[#162036]' : 'border-dashed border-[#334155] bg-[#0f172a]'"
+                                @drop.prevent="handleDrop($event)" @click="$refs.fileInput.click()"
+                                :class="isDropping ? 'border-edp-iceblue-100 bg-[#162036]' :
+                                    'border-dashed border-[#334155] bg-[#0f172a]'"
                                 class="relative flex flex-col items-center justify-center w-full rounded-lg border-2 py-8 cursor-pointer transition-colors">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-zinc-500"
                                     viewBox="0 0 20 20" fill="currentColor">
@@ -211,7 +217,8 @@
                                                 <p class="text-zinc-100">{{ $file['name'] }}</p>
                                                 <p class="text-xs text-zinc-500">{{ $file['size'] }}</p>
                                             </div>
-                                            <button type="button" wire:click="requestAttachmentRemoval('{{ $key }}')"
+                                            <button type="button"
+                                                wire:click="requestAttachmentRemoval('{{ $key }}')"
                                                 class="text-xs text-rose-300 hover:text-rose-200">Remover</button>
                                         </li>
                                     @endforeach
@@ -253,7 +260,9 @@
                                 </div>
                                 <div>
                                     <dt class="text-zinc-400">Prioridade</dt>
-                                    <dd class="text-zinc-100 capitalize">{{ $priority }}</dd>
+                                    <dd class="text-zinc-100">
+                                        {{ optional(collect($priorities)->firstWhere('id', $priorityId))['name'] ?? '-' }}
+                                    </dd>
                                 </div>
                                 <div>
                                     <dt class="text-zinc-400">SLA (previsão)</dt>
@@ -273,7 +282,8 @@
                                 @if ($attachmentPreview)
                                     <ul class="space-y-2 text-sm">
                                         @foreach ($attachmentPreview as $file)
-                                            <li class="flex items-center justify-between rounded border border-[#2b3649] bg-[#121a2a] px-3 py-2">
+                                            <li
+                                                class="flex items-center justify-between rounded border border-[#2b3649] bg-[#121a2a] px-3 py-2">
                                                 <span class="text-zinc-100">{{ $file['name'] }}</span>
                                                 <span class="text-xs text-zinc-500">{{ $file['size'] }}</span>
                                             </li>

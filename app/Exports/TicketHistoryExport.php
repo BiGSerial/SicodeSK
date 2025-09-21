@@ -63,9 +63,13 @@ class TicketHistoryExport implements FromCollection, WithHeadings, WithMapping, 
         return ucfirst(str_replace('_', ' ', $status));
     }
 
-    private function formatPriority(?string $priority): string
+    private function formatPriority($priority): string
     {
-        return $priority ? ucfirst($priority) : '—';
+        if (!$priority) {
+            return '—';
+        }
+
+        return $priority->name ?? '—';
     }
 
     public function styles(Worksheet $sheet): array

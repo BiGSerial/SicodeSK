@@ -17,7 +17,7 @@ class Ticket extends Model
         'subcategory_id',
         'workflow_id',
         'step_id',
-        'priority',
+        'priority_id',
         'title',
         'description',
         'status',
@@ -103,6 +103,11 @@ class Ticket extends Model
     public function step(): BelongsTo
     {
         return $this->belongsTo(WorkflowStep::class);
+    }
+
+    public function priority(): BelongsTo
+    {
+        return $this->belongsTo(Priority::class);
     }
 
     public function requester(): BelongsTo

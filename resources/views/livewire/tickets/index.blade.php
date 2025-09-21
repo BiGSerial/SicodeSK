@@ -100,13 +100,12 @@
 
                         <div class="flex flex-col gap-1">
                             <span class="text-xs uppercase tracking-wide text-zinc-400">Prioridade</span>
-                            <select wire:model.live="priority"
+                            <select wire:model.live="priorityId"
                                 class="w-full rounded-lg border border-[#334155] bg-[#0f172a] px-3 py-2 text-zinc-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
                                 <option value="">Qualquer</option>
-                                <option value="low">Baixa</option>
-                                <option value="medium">Média</option>
-                                <option value="high">Alta</option>
-                                <option value="urgent">Urgente</option>
+                                @foreach ($priorities as $priority)
+                                    <option value="{{ $priority->id }}">{{ $priority->name }}</option>
+                                @endforeach
                             </select>
                         </div>
 
@@ -234,8 +233,9 @@
 
                                         <td class="px-4 py-2">
                                             @php
-                                                $prio = $t->priority;
-                                                $pClass = match ($prio) {
+                                                $priority = $t->priority;
+                                                $prioritySlug = $priority?->slug;
+                                                $pClass = match ($prioritySlug) {
                                                     'low' => 'bg-emerald-700/30 text-emerald-300 border-emerald-700/60',
                                                     'medium' => 'bg-sky-700/30 text-sky-300 border-sky-700/60',
                                                     'high' => 'bg-amber-700/30 text-amber-300 border-amber-700/60',
@@ -245,7 +245,7 @@
                                             @endphp
                                             <span
                                                 class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs {{ $pClass }}">
-                                                {{ ucfirst($prio) }}
+                                                {{ $priority?->name ?? '—' }}
                                             </span>
                                         </td>
 

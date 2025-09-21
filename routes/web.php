@@ -2,6 +2,12 @@
 
 use App\Livewire\Auth\Login;
 use App\Livewire\Home\Index;
+use App\Livewire\Admin\Audit as AdminAudit;
+use App\Livewire\Admin\Organization as AdminOrganization;
+use App\Livewire\Admin\Overview as AdminOverview;
+use App\Livewire\Admin\Settings as AdminSettings;
+use App\Livewire\Admin\Slas as AdminSlas;
+use App\Livewire\Admin\Workflows as AdminWorkflows;
 use App\Livewire\Tickets\Admin as TicketsAdmin;
 use App\Livewire\Tickets\CreateWizard;
 use App\Livewire\Tickets\History as TicketsHistory;
@@ -42,6 +48,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/tickets/admin', TicketsAdmin::class)->name('tickets.admin');
     Route::get('/tickets/history', TicketsHistory::class)->name('tickets.history');
     Route::get('/tickets/{ticket}', TicketShow::class)->name('tickets.show');
+
+    Route::prefix('admin')->name('admin.')->group(function () {
+        Route::get('/overview', AdminOverview::class)->name('overview');
+        Route::get('/settings', AdminSettings::class)->name('settings');
+        Route::get('/organization', AdminOrganization::class)->name('organization');
+        Route::get('/slas', AdminSlas::class)->name('slas');
+        Route::get('/workflows', AdminWorkflows::class)->name('workflows');
+        Route::get('/audit', AdminAudit::class)->name('audit');
+    });
 });
 
 // Logout (POST)

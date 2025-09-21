@@ -42,6 +42,7 @@ class Show extends Component
             'subcategory:id,name',
             'workflow:id,name',
             'step:id,name',
+            'priority:id,name,slug,color',
         ]);
 
         $this->participants = $this->resolveParticipants($ticket);
@@ -248,6 +249,8 @@ class Show extends Component
         return match ($key) {
             'code' => 'Código',
             'priority' => 'Prioridade',
+            'priority_id' => 'Prioridade (ID)',
+            'priority_slug' => 'Prioridade',
             'area_id' => 'Área',
             'ticket_type_id' => 'Tipo de Ticket',
             'filename' => 'Arquivo',

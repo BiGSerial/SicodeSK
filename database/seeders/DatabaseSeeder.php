@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
 
 
         $this->call([
+            PrioritySeeder::class,
             TicketDemoSeeder::class,
             WorkflowDemoSeeder::class,
             TicketSeeder::class,

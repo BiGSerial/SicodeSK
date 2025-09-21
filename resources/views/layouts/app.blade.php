@@ -45,18 +45,61 @@
                 ];
 
                 if ($user) {
-                    $hasAdminView = \App\Models\Ticket::query()
-                        ->where(fn ($q) => $q
-                            ->where('manager_sicode_id', $user->id)
-                            ->orWhere('executor_sicode_id', $user->id))
-                        ->exists();
+                    $hasAdminView = (bool) ($user->superadm ?? false);
+
+                    if (!$hasAdminView) {
+                        $hasAdminView = \App\Models\Ticket::query()
+                            ->where(fn ($q) => $q
+                                ->where('manager_sicode_id', $user->id)
+                                ->orWhere('executor_sicode_id', $user->id))
+                            ->exists();
+                    }
 
                     if ($hasAdminView) {
+                        $adminChildren = [
+                            [
+                                'label' => 'Visão geral',
+                                'route' => 'admin.overview',
+                                'pattern' => 'admin.overview',
+                            ],
+                            [
+                                'label' => 'Parametrizações',
+                                'route' => 'admin.settings',
+                                'pattern' => 'admin.settings',
+                            ],
+                            [
+                                'label' => 'Estrutura organizacional',
+                                'route' => 'admin.organization',
+                                'pattern' => 'admin.organization',
+                            ],
+                            [
+                                'label' => 'SLAs',
+                                'route' => 'admin.slas',
+                                'pattern' => 'admin.slas',
+                            ],
+                            [
+                                'label' => 'Workflows',
+                                'route' => 'admin.workflows',
+                                'pattern' => 'admin.workflows',
+                            ],
+                            [
+                                'label' => 'Auditoria',
+                                'route' => 'admin.audit',
+                                'pattern' => 'admin.audit',
+                            ],
+                            [
+                                'label' => 'Painel gestor',
+                                'route' => 'tickets.admin',
+                                'pattern' => 'tickets.admin',
+                            ],
+                        ];
+
                         $navItems[] = [
-                            'label'   => 'Administração',
-                            'route'   => 'tickets.admin',
-                            'pattern' => 'tickets.admin',
-                            'icon'    => '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M11 17a1 1 0 11-2 0v-1.268a2 2 0 01.895-1.664l2.379-1.586A2 2 0 0013 11.586V9a3 3 0 10-6 0v2.586a2 2 0 00.726 1.482l2.379 1.586A2 2 0 0111 15.732V17z" /><path d="M7 5a3 3 0 116 0v.764A9.005 9.005 0 0117 14h-2a7 7 0 00-14 0H1a9.005 9.005 0 016-8.236V5z" /></svg>',
+                            'label'    => 'Administração',
+                            'route'    => 'admin.overview',
+                            'pattern'  => ['admin.*', 'tickets.admin'],
+                            'icon'     => '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M11 17a1 1 0 11-2 0v-1.268a2 2 0 01.895-1.664l2.379-1.586A2 2 0 0013 11.586V9a3 3 0 10-6 0v2.586a2 2 0 00.726 1.482l2.379 1.586A2 2 0 0111 15.732V17z" /><path d="M7 5a3 3 0 116 0v.764A9.005 9.005 0 0117 14h-2a7 7 0 00-14 0H1a9.005 9.005 0 016-8.236V5z" /></svg>',
+                            'children' => $adminChildren,
                         ];
                     }
                 }
@@ -76,11 +119,12 @@
 
                         @if (!empty($navItems))
                             <nav aria-label="Navegação principal"
-                                class="overflow-x-auto scrollbar-thin scrollbar-thumb-[#293445] scrollbar-track-transparent">
+                                class="overflow-x-auto lg:overflow-visible scrollbar-thin scrollbar-thumb-[#293445] scrollbar-track-transparent">
                                 <ul class="flex items-center gap-1 md:gap-2">
                                     @foreach ($navItems as $item)
                                         @php
-                                            $isActive = request()->routeIs($item['pattern']);
+                                            $patterns = (array) ($item['pattern'] ?? []);
+                                            $isActive = !empty($patterns) ? request()->routeIs($patterns) : false;
                                             $baseClasses = 'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-edp-iceblue-100 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f172a]';
                                             $activeClasses = $item['highlight'] ?? false
                                                 ? 'bg-gradient-to-r from-sky-600 to-blue-700 text-white shadow'
@@ -90,12 +134,54 @@
                                                 : 'text-zinc-300 hover:text-white hover:bg-[#1a2436]/80';
                                             $classes = $baseClasses . ' ' . ($isActive ? $activeClasses : $inactiveClasses);
                                         @endphp
-                                        <li>
-                                            <a href="{{ route($item['route']) }}" wire:navigate class="{{ $classes }}"
-                                                @if ($isActive) aria-current="page" @endif>
-                                                {!! $item['icon'] !!}
-                                                <span>{{ $item['label'] }}</span>
-                                            </a>
+                                        <li class="relative" x-data="{ open: false }">
+                                            @if (!empty($item['children']))
+                                                <button type="button" @click="open = !open"
+                                                    @keydown.escape.window="open = false"
+                                                    class="{{ $classes }}"
+                                                    x-bind:class="open ? 'bg-[#1a2436] text-white shadow-inner' : ''">
+                                                    {!! $item['icon'] !!}
+                                                    <span>{{ $item['label'] }}</span>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3"
+                                                        viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fill-rule="evenodd"
+                                                            d="M5.23 7.21a.75.75 0 011.06.02L10 10.939l3.71-3.71a.75.75 0 111.06 1.062l-4.24 4.24a.75.75 0 01-1.06 0l-4.24-4.24a.75.75 0 01.02-1.06z"
+                                                            clip-rule="evenodd" />
+                                                    </svg>
+                                                </button>
+
+                                                <div x-show="open" x-transition x-cloak
+                                                    @click.away="open = false"
+                                                    class="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-[#2b3649] bg-[#0f172a] p-2 shadow-xl"
+                                                    style="min-width: 14rem">
+                                                    <ul class="space-y-1 text-sm">
+                                                        @foreach ($item['children'] as $child)
+                                                            <li>
+                                                                @php
+                                                                    $childPatterns = (array) ($child['pattern'] ?? []);
+                                                                    $childActive = !empty($childPatterns) ? request()->routeIs($childPatterns) : false;
+                                                                @endphp
+                                                                <a href="{{ route($child['route']) }}" wire:navigate
+                                                                    class="flex items-center justify-between rounded-md px-3 py-2 text-zinc-300 hover:bg-[#1a2436] hover:text-white"
+                                                                    @if ($childActive) aria-current="page" @endif>
+                                                                    <span>{{ $child['label'] }}</span>
+                                                                    @if ($childActive)
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                                                            <path fill-rule="evenodd" d="M16.704 5.29a1 1 0 010 1.414l-7.004 7.005a1 1 0 01-1.414 0L3.296 8.72a1 1 0 111.414-1.414L9 11.596l6.296-6.305a1 1 0 011.408-.001z" clip-rule="evenodd" />
+                                                                        </svg>
+                                                                    @endif
+                                                                </a>
+                                                            </li>
+                                                        @endforeach
+                                                    </ul>
+                                                </div>
+                                            @else
+                                                <a href="{{ route($item['route']) }}" wire:navigate class="{{ $classes }}"
+                                                    @if ($isActive) aria-current="page" @endif>
+                                                    {!! $item['icon'] !!}
+                                                    <span>{{ $item['label'] }}</span>
+                                                </a>
+                                            @endif
                                         </li>
                                     @endforeach
                                 </ul>

@@ -3,6 +3,7 @@
 namespace App\Livewire\Tickets;
 
 use App\Exports\TicketHistoryExport;
+use App\Models\Priority;
 use App\Models\Ticket;
 use App\Models\TicketType;
 use App\Support\Concerns\WildcardFormatter;
@@ -24,7 +25,7 @@ class History extends Component
     public ?string $startDate = null;
     public ?string $endDate = null;
     public ?string $status = null;
-    public ?string $priority = null;
+    public ?int $priorityId = null;
     public ?int $ticketTypeId = null;
     public string $search = '';
     public int $perPage = 10;
@@ -33,7 +34,7 @@ class History extends Component
         'startDate' => ['except' => null],
         'endDate' => ['except' => null],
         'status' => ['except' => null],
-        'priority' => ['except' => null],
+        'priorityId' => ['except' => null],
         'ticketTypeId' => ['except' => null],
         'search' => ['except' => ''],
         'page' => ['except' => 1],
@@ -42,7 +43,7 @@ class History extends Component
 
     public function updating($name): void
     {
-        if (in_array($name, ['startDate', 'endDate', 'status', 'priority', 'ticketTypeId', 'search', 'perPage'])) {
+        if (in_array($name, ['startDate', 'endDate', 'status', 'priorityId', 'ticketTypeId', 'search', 'perPage'])) {
             $this->resetPage();
         }
     }
@@ -63,7 +64,7 @@ class History extends Component
             'startDate',
             'endDate',
             'status',
-            'priority',
+            'priorityId',
             'ticketTypeId',
             'search',
             'perPage',
@@ -72,11 +73,17 @@ class History extends Component
         $this->resetPage();
     }
 
+    public function updatedPriorityId($value): void
+    {
+        $this->priorityId = $value !== '' ? (int) $value : null;
+    }
+
     public function render()
     {
         return view('livewire.tickets.history', [
             'ticketTypes' => $this->ticketTypes(),
             'tickets' => $this->tickets(),
+            'priorities' => $this->priorities(),
         ]);
     }
 
@@ -91,6 +98,14 @@ class History extends Component
     {
         return $this->baseQuery()
             ->paginate($this->perPage);
+    }
+
+    private function priorities()
+    {
+        return \App\Models\Priority::query()
+            ->orderByDesc('weight')
+            ->orderBy('name')
+            ->get(['id', 'name', 'slug']);
     }
 
     public function export(string $format = 'xlsx')
@@ -114,7 +129,7 @@ class History extends Component
         $userId = Auth::id();
 
         return Ticket::query()
-            ->with(['type:id,name', 'area:id,name,sigla'])
+            ->with(['type:id,name', 'area:id,name,sigla', 'priority:id,name,slug,color'])
             ->where('requester_sicode_id', $userId)
             ->when($this->startDate, function (Builder $query) {
                 $start = Carbon::parse($this->startDate)->startOfDay();
@@ -125,7 +140,7 @@ class History extends Component
                 $query->whereDate('created_at', '<=', $end);
             })
             ->when($this->status, fn (Builder $query) => $query->where('status', $this->status))
-            ->when($this->priority, fn (Builder $query) => $query->where('priority', $this->priority))
+            ->when($this->priorityId, fn (Builder $query) => $query->where('priority_id', $this->priorityId))
             ->when($this->ticketTypeId, fn (Builder $query) => $query->where('ticket_type_id', $this->ticketTypeId))
             ->when($wildcard = $this->formatWildcard($this->search, false), function (Builder $query) use ($wildcard) {
 

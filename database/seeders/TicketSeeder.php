@@ -26,6 +26,11 @@ class TicketSeeder extends Seeder
             ->orderBy('order')
             ->value('id');
 
+        $priorityIds = DB::table('priorities')->pluck('id', 'slug');
+
+        $priorityMedium = $priorityIds['medium'] ?? $priorityIds->first();
+        $priorityUrgent = $priorityIds['urgent'] ?? $priorityIds->first();
+
         // Tickets DEMO (sem code — será gerado pelo Model)
         Ticket::create([
             'area_id'             => DB::connection('pgsql')->table('areas')->where('name', 'Development')->value('id'),
@@ -34,7 +39,7 @@ class TicketSeeder extends Seeder
             'subcategory_id'      => DB::connection('pgsql')->table('subcategories')->where('name', 'Frontend Bug')->value('id'),
             'workflow_id'         => $workflowId,
             'step_id'             => $stepId,
-            'priority'            => 'medium',
+            'priority_id'         => $priorityMedium,
             'title'               => 'Corrigir botão de login quebrado',
             'description'         => 'O botão de login não responde no navegador Firefox.',
             'status'              => 'open',
@@ -46,7 +51,7 @@ class TicketSeeder extends Seeder
         Ticket::create([
             'area_id'             => DB::connection('pgsql')->table('areas')->where('name', 'IT Support')->value('id'),
             'ticket_type_id'      => DB::connection('pgsql')->table('ticket_types')->where('name', 'Incident')->value('id'),
-            'priority'            => 'urgent',
+            'priority_id'         => $priorityUrgent,
             'title'               => 'Servidor de e-mail fora do ar',
             'description'         => 'Usuários não conseguem enviar nem receber e-mails.',
             'status'              => 'in_progress',
