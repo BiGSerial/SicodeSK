@@ -11,7 +11,6 @@ return new class () extends Migration {
             $t->index(['area_id', 'status']);
             $t->index(['requester_sicode_id']);
             $t->index(['executor_sicode_id']);
-            $t->index(['priority_id']);
             $t->index(['sla_due_at']);
         });
 
@@ -31,12 +30,18 @@ return new class () extends Migration {
         } catch (\Throwable $e) {
         }
 
-        Schema::table('tickets', function ($t) {
-            $t->dropIndex(['area_id', 'status']);
-            $t->dropIndex(['requester_sicode_id']);
-            $t->dropIndex(['executor_sicode_id']);
-            $t->dropIndex(['priority_id']);
-            $t->dropIndex(['sla_due_at']);
-        });
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('DROP INDEX IF EXISTS tickets_area_id_status_index');
+            DB::statement('DROP INDEX IF EXISTS tickets_requester_sicode_id_index');
+            DB::statement('DROP INDEX IF EXISTS tickets_executor_sicode_id_index');
+            DB::statement('DROP INDEX IF EXISTS tickets_sla_due_at_index');
+        } else {
+            Schema::table('tickets', function ($t) {
+                $t->dropIndex(['area_id', 'status']);
+                $t->dropIndex(['requester_sicode_id']);
+                $t->dropIndex(['executor_sicode_id']);
+                $t->dropIndex(['sla_due_at']);
+            });
+        }
     }
 };

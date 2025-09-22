@@ -2,12 +2,12 @@
 
 namespace App\Listeners;
 
-use App\Livewire\Auth\Login;
+use Illuminate\Auth\Events\Login;
 use App\Models\SicodeUser;
 use App\Models\User;
-use IlluminateAuthEventsLogin;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Queue\InteractsWithQueue;
+use App\Models\Role;
+use App\Services\AuthorizationService;
+use Illuminate\Support\Facades\Cache;
 
 class SyncSicodeUserOnLogin
 {
@@ -24,14 +24,28 @@ class SyncSicodeUserOnLogin
      */
     public function handle(Login $event): void
     {
-         $sicodeUser = $event->user; // este é o Auth::user(), vindo do Sicode
+        $sicodeUser = $event->user; // este é o Auth::user(), vindo do Sicode
 
         if ($sicodeUser instanceof SicodeUser) {
-            // Cria ou atualiza no banco Sicodesk
-            User::updateOrCreate(
-                ['sicode_id' => $sicodeUser->id],
-                ['preferences' => []] // ou mantém o que já existe
+            $local = User::firstOrCreate(
+                ['sicode_uuid' => $sicodeUser->id]
             );
+
+            Cache::forget("user:{$sicodeUser->id}:roles");
+
+            $roleSlug = ($sicodeUser->superadm ?? false)
+                ? AuthorizationService::ROLE_ADMIN
+                : AuthorizationService::ROLE_REQUESTER;
+
+            $role = Role::where('slug', $roleSlug)->first();
+
+            if ($role) {
+                $local->roles()->syncWithoutDetaching([$role->id]);
+            }
+
+            if (!$sicodeUser->superadm && $roleSlug !== AuthorizationService::ROLE_REQUESTER) {
+                $local->roles()->detach(Role::where('slug', AuthorizationService::ROLE_ADMIN)->pluck('id'));
+            }
         }
     }
 }

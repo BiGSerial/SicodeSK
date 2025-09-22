@@ -353,3 +353,47 @@
         @endif
     </main>
 </div>
+
+@push('scripts')
+    <script>
+        (() => {
+            const storageKey = 'sicodeSK:ticket-draft';
+            let restored = false;
+
+            document.addEventListener('livewire:init', () => {
+                Livewire.on('ticket-form-state', (state) => {
+                    try {
+                        localStorage.setItem(storageKey, JSON.stringify(state));
+                    } catch (error) {
+                        console.warn('Não foi possível armazenar rascunho do ticket.', error);
+                    }
+                });
+
+                Livewire.on('ticket-form-cleared', () => {
+                    localStorage.removeItem(storageKey);
+                });
+
+                Livewire.hook('component.initialized', ({ component }) => {
+                    if (restored || component.name !== 'tickets.create-wizard') {
+                        return;
+                    }
+
+                    const draft = localStorage.getItem(storageKey);
+                    if (!draft) {
+                        restored = true;
+                        return;
+                    }
+
+                    try {
+                        const payload = JSON.parse(draft);
+                        component.dispatch('restore-ticket-draft', payload);
+                    } catch (error) {
+                        console.warn('Não foi possível restaurar rascunho do ticket.', error);
+                    } finally {
+                        restored = true;
+                    }
+                });
+            });
+        })();
+    </script>
+@endpush

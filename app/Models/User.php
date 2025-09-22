@@ -13,7 +13,7 @@ class User extends Model
     protected $table = 'users'; // tabela local do Sicodesk
 
     protected $fillable = [
-        'sicode_id',
+        'sicode_uuid',
         'preferences', // JSON para configs locais
     ];
 
@@ -23,6 +23,21 @@ class User extends Model
 
     public function sicodeUser()
     {
-        return $this->belongsTo(SicodeUser::class, 'sicode_id');
+        return $this->belongsTo(SicodeUser::class, 'sicode_uuid', 'id');
+    }
+
+    public function roles()
+    {
+        return $this->belongsToMany(Role::class)->withTimestamps();
+    }
+
+    public function hasRole(string $slug): bool
+    {
+        return $this->roles->contains(fn ($role) => $role->slug === $slug);
+    }
+
+    public function hasAnyRole(array $slugs): bool
+    {
+        return $this->roles->whereIn('slug', $slugs)->isNotEmpty();
     }
 }

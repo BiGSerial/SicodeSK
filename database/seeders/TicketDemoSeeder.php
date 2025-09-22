@@ -74,58 +74,100 @@ class TicketDemoSeeder extends Seeder
 
             // ========== CATEGORIAS ==========
             $categoriesMap = [
-                'DEV' => ['UI/UX', 'Backend'],
-                'INF' => ['Database', 'Networking'],
+                'DEV' => [
+                    'Bug Fix' => ['UI/UX', 'Backend'],
+                    'New Feature' => ['Product Discovery'],
+                ],
+                'ITS' => [
+                    'Incident' => ['Hardware', 'Software'],
+                    'Request Access' => ['Account Provisioning'],
+                ],
+                'INF' => [
+                    'Server Maintenance' => ['Database', 'Networking'],
+                ],
             ];
 
-            foreach ($categoriesMap as $sigla => $cats) {
+            foreach ($categoriesMap as $sigla => $typeGroups) {
                 $aid = $areaId($sigla);
                 if (!$aid) {
                     continue;
                 }
 
-                foreach ($cats as $name) {
-                    Category::updateOrCreate(
-                        ['area_id' => $aid, 'name' => $name],
-                        ['active'  => true]
-                    );
+                foreach ($typeGroups as $typeName => $categories) {
+                    $typeId = TicketType::where('area_id', $aid)->where('name', $typeName)->value('id');
+                    if (!$typeId) {
+                        continue;
+                    }
+
+                    foreach ($categories as $name) {
+                        Category::updateOrCreate(
+                            ['ticket_type_id' => $typeId, 'name' => $name],
+                            ['area_id' => $aid, 'active'  => true]
+                        );
+                    }
                 }
             }
 
-            // Helper para pegar id da categoria por (area, nome)
-            $categoryId = function (string $areaSigla, string $catName) {
-                $aid = Area::where('sigla', strtoupper($areaSigla))->value('id');
-                if (!$aid) {
-                    return null;
-                }
-                return Category::where('area_id', $aid)->where('name', $catName)->value('id');
+            // Helper para pegar id da categoria por (tipo, nome)
+            $categoryId = function (int $typeId, string $catName) {
+                return Category::where('ticket_type_id', $typeId)
+                    ->where('name', $catName)
+                    ->value('id');
             };
 
             // ========== SUBCATEGORIAS ==========
             $subcategoriesMap = [
-                // area => [ categoria => [subcats...] ]
+                // area => [ tipo => [ categoria => [subcats...] ] ]
                 'DEV' => [
-                    'UI/UX'   => ['Frontend Bug', 'Design Change'],
-                    'Backend' => ['API Endpoint'],
+                    'Bug Fix' => [
+                        'UI/UX'   => ['Frontend Bug', 'Design Change'],
+                        'Backend' => ['API Endpoint'],
+                    ],
+                    'New Feature' => [
+                        'Product Discovery' => ['Requirement Gathering'],
+                    ],
+                ],
+                'ITS' => [
+                    'Incident' => [
+                        'Hardware' => ['Peripheral Issue'],
+                        'Software' => ['Application Crash'],
+                    ],
+                    'Request Access' => [
+                        'Account Provisioning' => ['VPN', 'ERP'],
+                    ],
                 ],
                 'INF' => [
-                    'Database'  => ['Database Index'],
-                    'Networking' => ['Firewall'],
+                    'Server Maintenance' => [
+                        'Database'  => ['Database Index'],
+                        'Networking' => ['Firewall'],
+                    ],
                 ],
             ];
 
-            foreach ($subcategoriesMap as $sigla => $byCat) {
-                foreach ($byCat as $catName => $subs) {
-                    $cid = $categoryId($sigla, $catName);
-                    if (!$cid) {
+            foreach ($subcategoriesMap as $sigla => $types) {
+                $aid = $areaId($sigla);
+                if (!$aid) {
+                    continue;
+                }
+
+                foreach ($types as $typeName => $categories) {
+                    $typeId = TicketType::where('area_id', $aid)->where('name', $typeName)->value('id');
+                    if (!$typeId) {
                         continue;
                     }
 
-                    foreach ($subs as $name) {
-                        Subcategory::updateOrCreate(
-                            ['category_id' => $cid, 'name' => $name],
-                            ['active'      => true]
-                        );
+                    foreach ($categories as $categoryName => $subs) {
+                        $cid = $categoryId($typeId, $categoryName);
+                        if (!$cid) {
+                            continue;
+                        }
+
+                        foreach ($subs as $name) {
+                            Subcategory::updateOrCreate(
+                                ['category_id' => $cid, 'name' => $name],
+                                ['active'      => true]
+                            );
+                        }
                     }
                 }
             }

@@ -5,6 +5,7 @@ use App\Livewire\Home\Index;
 use App\Livewire\Admin\Audit as AdminAudit;
 use App\Livewire\Admin\Organization as AdminOrganization;
 use App\Livewire\Admin\Overview as AdminOverview;
+use App\Livewire\Admin\Roles as AdminRoles;
 use App\Livewire\Admin\Settings as AdminSettings;
 use App\Livewire\Admin\Slas as AdminSlas;
 use App\Livewire\Admin\Workflows as AdminWorkflows;
@@ -13,6 +14,7 @@ use App\Livewire\Tickets\CreateWizard;
 use App\Livewire\Tickets\History as TicketsHistory;
 use App\Livewire\Tickets\Index as TicketsIndex;
 use App\Livewire\Tickets\Show as TicketShow;
+use App\Http\Controllers\Auth\SicodeSsoController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -38,6 +40,9 @@ Route::middleware('guest')->group(function () {
     Route::get('/login', Login::class)
         ->middleware('throttle:login')
         ->name('login');
+
+    Route::post('/sicode/auto-login', SicodeSsoController::class)
+        ->name('sicode.auto-login');
 });
 
 // Authenticated
@@ -56,6 +61,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/slas', AdminSlas::class)->name('slas');
         Route::get('/workflows', AdminWorkflows::class)->name('workflows');
         Route::get('/audit', AdminAudit::class)->name('audit');
+        Route::get('/roles', AdminRoles::class)->name('roles');
     });
 });
 

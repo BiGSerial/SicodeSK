@@ -56,27 +56,32 @@
                     }
 
                     if ($hasAdminView) {
-                        $adminChildren = [
-                            [
-                                'label' => 'Visão geral',
-                                'route' => 'admin.overview',
-                                'pattern' => 'admin.overview',
-                            ],
-                            [
-                                'label' => 'Parametrizações',
-                                'route' => 'admin.settings',
-                                'pattern' => 'admin.settings',
-                            ],
-                            [
-                                'label' => 'Estrutura organizacional',
-                                'route' => 'admin.organization',
-                                'pattern' => 'admin.organization',
-                            ],
-                            [
-                                'label' => 'SLAs',
-                                'route' => 'admin.slas',
-                                'pattern' => 'admin.slas',
-                            ],
+                            $adminChildren = [
+                                [
+                                    'label' => 'Visão geral',
+                                    'route' => 'admin.overview',
+                                    'pattern' => 'admin.overview',
+                                ],
+                                [
+                                    'label' => 'Parametrizações',
+                                    'route' => 'admin.settings',
+                                    'pattern' => 'admin.settings',
+                                ],
+                                [
+                                    'label' => 'Estrutura organizacional',
+                                    'route' => 'admin.organization',
+                                    'pattern' => 'admin.organization',
+                                ],
+                                [
+                                    'label' => 'Gestão de perfis',
+                                    'route' => 'admin.roles',
+                                    'pattern' => 'admin.roles',
+                                ],
+                                [
+                                    'label' => 'SLAs',
+                                    'route' => 'admin.slas',
+                                    'pattern' => 'admin.slas',
+                                ],
                             [
                                 'label' => 'Workflows',
                                 'route' => 'admin.workflows',

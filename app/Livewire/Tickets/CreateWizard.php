@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Carbon\CarbonInterface;
 // Models que já assumimos existir no sicodeSK (Postgres):
 use App\Models\Area;
 use App\Models\Category;
@@ -23,6 +24,9 @@ use App\Models\WorkflowStep;
 use App\Models\TicketAttachment;
 use App\Models\TicketEvent;
 use App\Services\TicketCodeService;
+use App\Services\SlaResolver;
+use App\Services\AuthorizationService;
+use App\Models\SystemSetting;
 
 #[Layout('layouts.app')]
 class CreateWizard extends Component
@@ -58,10 +62,17 @@ class CreateWizard extends Component
     public array $pendingAttachments = [];
     public array $attachmentPreview = [];
 
+    protected ?array $policiesCache = null;
+
     public function mount(): void
     {
+        if (!app(AuthorizationService::class)->canCreateTicket()) {
+            abort(403, 'Você não tem permissão para abrir novos tickets.');
+        }
+
         $this->loadAreas();
         $this->loadPriorities();
+        $this->broadcastState();
     }
 
     /* ---------- Loaders ---------- */
@@ -124,6 +135,7 @@ class CreateWizard extends Component
 
         $this->subcategories = [];
         $this->computeSlaPreview();
+        $this->broadcastState();
     }
 
     public function updatedCategoryId(): void
@@ -142,16 +154,19 @@ class CreateWizard extends Component
             $this->subcategories = [];
         }
         $this->computeSlaPreview();
+        $this->broadcastState();
     }
 
     public function updatedTicketTypeId(): void
     {
         $this->computeSlaPreview();
+        $this->broadcastState();
     }
 
     public function updatedPriorityId(): void
     {
         $this->computeSlaPreview();
+        $this->broadcastState();
     }
 
     /* ---------- Steps ---------- */
@@ -161,11 +176,13 @@ class CreateWizard extends Component
         $this->validateStep($this->step);
 
         $this->step = min(4, $this->step + 1);
+        $this->broadcastState();
     }
 
     public function prev(): void
     {
         $this->step = max(1, $this->step - 1);
+        $this->broadcastState();
     }
 
     protected function validateStep(int $step): void
@@ -203,19 +220,42 @@ class CreateWizard extends Component
 
     /* ---------- SLA (preview e cálculo) ---------- */
 
-    protected function computeSlaMinutes(int $priorityId, ?int $areaId, ?int $ticketTypeId): int
+    protected function resolveSla(?CarbonInterface $baseline = null): ?array
     {
-        $priority = Priority::find($priorityId);
-        $slug = $priority?->slug ?? 'medium';
+        if (!$this->priorityId) {
+            return null;
+        }
 
-        // TODO: substituir por consulta às tabelas de SLA parametrizadas
-        return match ($slug) {
-            'low'    => 48 * 60,
-            'medium' => 24 * 60,
-            'high'   => 8  * 60,
-            'urgent' => 4  * 60,
-            default  => 24 * 60,
-        };
+        $baseline = $baseline ?? now();
+
+        $resolver = app(SlaResolver::class);
+
+        $minutes = $resolver->resolveMinutes(
+            $this->priorityId,
+            $this->areaId,
+            $this->ticketTypeId,
+            $this->categoryId,
+            $this->subcategoryId
+        );
+
+        $calendar = $this->areaId
+            ? Area::query()->with(['workCalendar.holidays'])->find($this->areaId)?->workCalendar
+            : null;
+
+        $dueAt = $resolver->resolveDueDate(
+            $this->priorityId,
+            $this->areaId,
+            $this->ticketTypeId,
+            $this->categoryId,
+            $this->subcategoryId,
+            $baseline,
+            $calendar
+        );
+
+        return [
+            'minutes' => $minutes,
+            'due_at' => $dueAt,
+        ];
     }
 
     protected function computeSlaPreview(): void
@@ -225,10 +265,26 @@ class CreateWizard extends Component
             return;
         }
 
-        $mins = $this->computeSlaMinutes($this->priorityId, $this->areaId, $this->ticketTypeId);
-        $hours = intdiv($mins, 60);
-        $rest = $mins % 60;
-        $this->slaPreview = $rest ? "{$hours}h {$rest}m" : "{$hours}h";
+        $result = $this->resolveSla();
+
+        if (!$result) {
+            $this->slaPreview = null;
+            return;
+        }
+
+        $minutes = $result['minutes'] ?? null;
+        $dueAt = $result['due_at'] ?? null;
+
+        if ($minutes === null || !$dueAt) {
+            $this->slaPreview = null;
+            return;
+        }
+
+        $hours = intdiv($minutes, 60);
+        $rest = $minutes % 60;
+        $durationLabel = $rest ? "{$hours}h {$rest}m" : "{$hours}h";
+
+        $this->slaPreview = sprintf('%s • vence %s', $durationLabel, $dueAt->translatedFormat('d/m H:i'));
     }
 
     /* ---------- Submit ---------- */
@@ -242,8 +298,9 @@ class CreateWizard extends Component
         $user = Auth::user(); // SicodeUser (MariaDB)
         $requesterSicodeId = $user->id; // uuid
 
-        $slaMinutes = $this->computeSlaMinutes($this->priorityId, $this->areaId, $this->ticketTypeId);
-        $dueAt = now()->addMinutes($slaMinutes);
+        $slaResult = $this->resolveSla();
+        $slaMinutes = $slaResult['minutes'] ?? 0;
+        $dueAt = $slaResult['due_at'] ?? now()->addMinutes($slaMinutes);
 
         $selectedPriority = $this->priorityId ? Priority::find($this->priorityId) : null;
         $prioritySlug = $selectedPriority?->slug;
@@ -253,11 +310,8 @@ class CreateWizard extends Component
         $ticket = null;
 
         DB::connection('pgsql')->transaction(function () use (&$ticket, $requesterSicodeId, $dueAt, $selectedPriority, $prioritySlug) {
-            // (opcional) workflow por área
-            $workflowId = Workflow::query()
-                ->where('area_id', $this->areaId)
-                ->where('active', true)
-                ->value('id');
+            $workflow = $this->resolveWorkflow();
+            $workflowId = $workflow?->id;
 
             $firstStepId = null;
             if ($workflowId) {
@@ -314,6 +368,8 @@ class CreateWizard extends Component
         }
 
         $this->resetAttachmentState();
+
+        $this->dispatch('ticket-form-cleared');
 
         session()->flash('status', 'Ticket created successfully.');
         $this->redirectRoute('dashboard', navigate: true);
@@ -374,8 +430,63 @@ class CreateWizard extends Component
 
     public function updatedAttachmentUploads(): void
     {
+        $policies = $this->globalPolicies();
+        $maxPerTicket = (int) data_get($policies, 'attachments.max_per_ticket', 10);
+        $maxSizeMb = (int) data_get($policies, 'attachments.max_size_mb', 25);
+        $maxBytes = $maxSizeMb * 1024 * 1024;
+        $allowed = collect(data_get($policies, 'attachments.allowed_extensions', []))
+            ->filter()
+            ->map(fn ($ext) => strtolower($ext))
+            ->values();
+        $blocked = collect(data_get($policies, 'attachments.blocked_extensions', []))
+            ->filter()
+            ->map(fn ($ext) => strtolower($ext))
+            ->values();
+
         foreach ($this->attachmentUploads as $upload) {
             if (!$upload) {
+                continue;
+            }
+
+            if (count($this->pendingAttachments) >= $maxPerTicket) {
+                $this->dispatch('sweet-alert', [
+                    'type' => 'warning',
+                    'title' => 'Limite de anexos atingido',
+                    'text' => 'Remova um arquivo antes de adicionar outro.',
+                    'toast' => true,
+                ]);
+                break;
+            }
+
+            if ($upload->getSize() > $maxBytes) {
+                $this->dispatch('sweet-alert', [
+                    'type' => 'error',
+                    'title' => 'Arquivo muito grande',
+                    'text' => "Cada anexo pode ter até {$maxSizeMb} MB.",
+                    'toast' => true,
+                ]);
+                continue;
+            }
+
+            $extension = strtolower($upload->getClientOriginalExtension() ?: '');
+
+            if ($blocked->contains($extension)) {
+                $this->dispatch('sweet-alert', [
+                    'type' => 'error',
+                    'title' => 'Extensão bloqueada',
+                    'text' => "Arquivos .{$extension} não são permitidos.",
+                    'toast' => true,
+                ]);
+                continue;
+            }
+
+            if ($allowed->isNotEmpty() && !$allowed->contains($extension)) {
+                $this->dispatch('sweet-alert', [
+                    'type' => 'error',
+                    'title' => 'Formato não permitido',
+                    'text' => 'O arquivo não está na lista de formatos aceitos.',
+                    'toast' => true,
+                ]);
                 continue;
             }
 
@@ -399,14 +510,47 @@ class CreateWizard extends Component
 
     private function validateAttachments(): void
     {
-        if (empty($this->pendingAttachments)) {
-            return;
+        $policies = $this->globalPolicies();
+        $maxPerTicket = (int) data_get($policies, 'attachments.max_per_ticket', 10);
+        $maxSizeMb = (int) data_get($policies, 'attachments.max_size_mb', 25);
+        $maxBytes = $maxSizeMb * 1024 * 1024;
+        $allowed = collect(data_get($policies, 'attachments.allowed_extensions', []))->map(fn ($ext) => strtolower($ext))->filter();
+        $blocked = collect(data_get($policies, 'attachments.blocked_extensions', []))->map(fn ($ext) => strtolower($ext))->filter();
+
+        if (count($this->pendingAttachments) > $maxPerTicket) {
+            $this->setErrorBag(new \Illuminate\Support\MessageBag([
+                'attachments' => ["Máximo de {$maxPerTicket} anexos por ticket."],
+            ]));
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'attachments' => "Máximo de {$maxPerTicket} anexos por ticket.",
+            ]);
         }
 
-        $payload = ['attachments' => array_values($this->pendingAttachments)];
-        validator($payload, [
-            'attachments.*' => 'file|max:10240',
-        ])->validate();
+        foreach ($this->pendingAttachments as $upload) {
+            if (!$upload) {
+                continue;
+            }
+
+            if ($upload->getSize() > $maxBytes) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'attachments' => "Cada anexo pode ter até {$maxSizeMb} MB.",
+                ]);
+            }
+
+            $extension = strtolower($upload->getClientOriginalExtension() ?: '');
+
+            if ($blocked->contains($extension)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'attachments' => "Arquivos .{$extension} não são permitidos.",
+                ]);
+            }
+
+            if ($allowed->isNotEmpty() && !$allowed->contains($extension)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'attachments' => 'Um ou mais anexos estão em formato não permitido.',
+                ]);
+            }
+        }
     }
 
     private function persistAttachments(Ticket $ticket, array $uploads, string $actorId): void
@@ -414,6 +558,15 @@ class CreateWizard extends Component
         $disk = 'public';
         $directory = "tickets/{$ticket->code}";
         $existingCount = TicketAttachment::where('ticket_id', $ticket->id)->count();
+
+        $policies = $this->globalPolicies();
+        $maxPerTicket = (int) data_get($policies, 'attachments.max_per_ticket', 10);
+
+        if ($existingCount + count($uploads) > $maxPerTicket) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'attachments' => 'Quantidade de anexos excede a política configurada.',
+            ]);
+        }
 
         $index = 0;
         foreach (array_values($uploads) as $file) {
@@ -468,5 +621,156 @@ class CreateWizard extends Component
         $this->pendingAttachments = [];
         $this->attachmentPreview = [];
         $this->attachmentUploads = [];
+    }
+
+    #[On('restore-ticket-draft')]
+    public function restoreDraft(array $state): void
+    {
+        $this->step = max(1, min(4, (int) ($state['step'] ?? $this->step)));
+
+        $this->areaId = $state['area_id'] ?? null;
+        $this->ticketTypeId = $state['ticket_type_id'] ?? null;
+        $this->categoryId = $state['category_id'] ?? null;
+        $this->subcategoryId = $state['subcategory_id'] ?? null;
+        $this->priorityId = $state['priority_id'] ?? $this->priorityId;
+        $this->title = $state['title'] ?? $this->title;
+        $this->description = $state['description'] ?? $this->description;
+
+        // Recarrega combos com base na área selecionada
+        if ($this->areaId) {
+            $this->ticketTypes = TicketType::query()
+                ->where('active', true)
+                ->where('area_id', $this->areaId)
+                ->orderBy('name')
+                ->get(['id','name'])
+                ->map(fn ($t) => ['id' => $t->id,'name' => $t->name])
+                ->toArray();
+
+            $this->categories = Category::query()
+                ->where('active', true)
+                ->where('area_id', $this->areaId)
+                ->orderBy('name')
+                ->get(['id','name'])
+                ->map(fn ($c) => ['id' => $c->id,'name' => $c->name])
+                ->toArray();
+        } else {
+            $this->ticketTypes = [];
+            $this->categories = [];
+        }
+
+        if ($this->categoryId) {
+            $this->subcategories = Subcategory::query()
+                ->where('active', true)
+                ->where('category_id', $this->categoryId)
+                ->orderBy('name')
+                ->get(['id','name'])
+                ->map(fn ($s) => ['id' => $s->id,'name' => $s->name])
+                ->toArray();
+        } else {
+            $this->subcategories = [];
+        }
+
+        // Garante que IDs ainda existam nas coleções carregadas
+        if ($this->ticketTypes && !collect($this->ticketTypes)->firstWhere('id', $this->ticketTypeId)) {
+            $this->ticketTypeId = null;
+        }
+
+        if ($this->categories && !collect($this->categories)->firstWhere('id', $this->categoryId)) {
+            $this->categoryId = null;
+        }
+
+        if ($this->subcategories && !collect($this->subcategories)->firstWhere('id', $this->subcategoryId)) {
+            $this->subcategoryId = null;
+        }
+
+        if ($this->priorities && !collect($this->priorities)->firstWhere('id', $this->priorityId)) {
+            $default = collect($this->priorities)->firstWhere('is_default', true) ?? collect($this->priorities)->first();
+            $this->priorityId = $default['id'] ?? null;
+        }
+
+        $this->computeSlaPreview();
+        $this->broadcastState();
+    }
+
+    private function formState(): array
+    {
+        return [
+            'step' => $this->step,
+            'area_id' => $this->areaId,
+            'ticket_type_id' => $this->ticketTypeId,
+            'category_id' => $this->categoryId,
+            'subcategory_id' => $this->subcategoryId,
+            'priority_id' => $this->priorityId,
+            'title' => $this->title,
+            'description' => $this->description,
+        ];
+    }
+
+    private function broadcastState(): void
+    {
+        $this->dispatch('ticket-form-state', $this->formState());
+    }
+
+    public function updated($property, $value): void
+    {
+        if (in_array($property, ['title', 'description'])) {
+            $this->broadcastState();
+        }
+    }
+
+    private function resolveWorkflow(): ?Workflow
+    {
+        if (!$this->areaId) {
+            return null;
+        }
+
+        return Workflow::query()
+            ->where('area_id', $this->areaId)
+            ->where('active', true)
+            ->when($this->ticketTypeId, function ($query) {
+                $query->where(function ($q) {
+                    $q->whereNull('ticket_type_id')
+                        ->orWhere('ticket_type_id', $this->ticketTypeId);
+                });
+            })
+            ->when($this->categoryId, function ($query) {
+                $query->where(function ($q) {
+                    $q->whereNull('category_id')
+                        ->orWhere('category_id', $this->categoryId);
+                });
+            })
+            ->orderByRaw('CASE WHEN ticket_type_id IS NULL THEN 1 ELSE 0 END')
+            ->orderByRaw('CASE WHEN category_id IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('name')
+            ->first();
+    }
+
+    private function globalPolicies(): array
+    {
+        if ($this->policiesCache !== null) {
+            return $this->policiesCache;
+        }
+
+        $defaults = [
+            'attachments' => [
+                'max_size_mb' => 25,
+                'max_per_ticket' => 10,
+                'allowed_extensions' => ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'xlsx'],
+                'blocked_extensions' => ['exe', 'bat'],
+            ],
+            'permissions' => [
+                'ticket_creation_roles' => ['requester', 'manager'],
+                'comment_roles' => ['requester', 'agent', 'manager'],
+            ],
+            'notifications' => [
+                'sla_breach_email' => true,
+                'sla_breach_minutes_before' => 30,
+            ],
+        ];
+
+        $setting = SystemSetting::query()->where('key', 'global_policies')->first();
+        $value = $setting?->value ?? [];
+
+        return $this->policiesCache = array_replace_recursive($defaults, $value);
     }
 }

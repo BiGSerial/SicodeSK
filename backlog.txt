@@ -1,0 +1,21 @@
+Próximos Passos
+
+Governança de Perfis: mapear e persistir os papéis (comum, agente, gestor de área, gestor geral, administrador) e ajustar gates/policies para cada fluxo (criação/visualização de tickets, comentários públicos/privados, atribuições manuais, aprovação de tickets).
+Upload & Políticas: aplicar as regras globais de anexos e permissões na API de comentários e demais telas além do CreateWizard (validação no backend + hints na UI).
+Workflows Específicos: completar a seleção de workflow no CreateWizard usando os filtros de tipo/categoria já configuráveis na tela admin (aplicar Workflow::query()->where... com fallback).
+Dashboards por Perfil: modelar endpoints Livewire para dashboards de agente, gestor de área e gestor geral; definir métricas, cards e visões em tempo real.
+Charts Componentizados: criar componentes Livewire/Blade com ChartJS parametrizado (dataset, labels, cores) reutilizáveis nos dashboards e relatórios exportáveis.
+Relatórios & Exportação: implementar geração de relatórios filtráveis (área/tipo/período) com opção de exportar gráficos/tabelas (PDF/Excel) para apresentações.
+Regras de APROVAÇÃO: integrar workflows com passos que exigem aprovação do gestor da área (notificações, change logs e interface de aprovação/recusa).
+Banco de Conhecimento: expor busca para agentes em tickets histórico conforme permissões (leitura, filtro por categoria) e eventual marcação de “resolução destaque”.
+O que Já Está Pronto
+
+Estrutura de dados: áreas, tipos, categorias, subcategorias, SLAs, calendários, workflows, system settings (políticas globais), todos com CRUD via Livewire e UI padronizada.
+CreateWizard: fluxo completo de abertura de ticket com seleção dinâmica, pré-visualização de SLA usando calendário de trabalho e workflows básicos.
+Gestão Admin: telas para prioridades, catálogo, SLA rules, calendários/feriados, workflows, políticas globais — tudo seguindo Clean Architecture (componentes Livewire dedicados, serviços: SlaResolver, WorkCalendarCalculator).
+SweetAlert padrão: confirmações e feedbacks sistematizados; UI consistente com design dark/edp.
+Integração SLA + Calendário: cálculo de vencimento considera base minutes + incrementos + jornada útil/feriados; create wizard calcula due date real.
+Com esse panorama, podemos seguir detalhando cada entrega — comece definindo a camada de autorização por perfil e os dashboards do agente/gestor, já aproveitando a base existente de calendários, SLAs e workflows.
+
+
+Observaçao: POssuimos SweeAlert2, seguir padrao utilizado em demais confirmaçoes e informaóes de sucesso. Usamos livewire 3, Laravel 12, e obedecemos o clean arch e Clean Code. o UI/UX deve ser simples e intuitiva a qualquer nivel de usuário. 

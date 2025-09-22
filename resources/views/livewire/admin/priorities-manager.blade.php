@@ -1,16 +1,4 @@
 <div class="space-y-6">
-    @if (session('status'))
-        <div class="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-            {{ session('status') }}
-        </div>
-    @endif
-
-    @error('delete')
-        <div class="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            {{ $message }}
-        </div>
-    @enderror
-
     <div class="flex items-center justify-between">
         <div>
             <h3 class="text-sm font-semibold text-zinc-100">Prioridades cadastradas</h3>
@@ -154,20 +142,4 @@
         </div>
     @endif
 
-    @if ($showDeleteConfirm)
-        <div class="rounded-xl border border-rose-500/40 bg-rose-500/10 p-5 text-sm text-rose-100">
-            <p class="font-semibold">Tem certeza que deseja remover esta prioridade?</p>
-            <p class="mt-1 text-rose-200">Esta ação não pode ser desfeita.</p>
-            <div class="mt-3 flex justify-end gap-2">
-                <button wire:click="$set('showDeleteConfirm', false)"
-                    class="rounded-lg border border-[#2b3649] px-3 py-1.5 text-xs text-rose-200 hover:bg-[#121a2a]">
-                    Cancelar
-                </button>
-                <button wire:click="delete"
-                    class="rounded-lg border border-rose-500/60 bg-rose-500/20 px-3 py-1.5 text-xs font-medium text-rose-100 hover:bg-rose-500/30">
-                    Remover
-                </button>
-            </div>
-        </div>
-    @endif
 </div>

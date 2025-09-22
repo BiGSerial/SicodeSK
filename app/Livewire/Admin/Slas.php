@@ -3,7 +3,6 @@
 namespace App\Livewire\Admin;
 
 use App\Livewire\Concerns\ChecksAdminAccess;
-use App\Models\Sla;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -19,8 +18,6 @@ class Slas extends Component
 
     public function render()
     {
-        return view('livewire.admin.slas', [
-            'slas' => Sla::query()->orderBy('name')->get(),
-        ]);
+        return view('livewire.admin.slas');
     }
 }

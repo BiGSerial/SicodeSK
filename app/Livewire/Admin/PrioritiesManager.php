@@ -12,7 +12,6 @@ class PrioritiesManager extends Component
     use ChecksAdminAccess;
 
     public bool $showForm = false;
-    public bool $showDeleteConfirm = false;
     public array $form = [
         'name' => '',
         'slug' => '',
@@ -23,7 +22,6 @@ class PrioritiesManager extends Component
     ];
 
     public ?Priority $editing = null;
-    public ?int $priorityIdBeingDeleted = null;
 
     protected $rules = [
         'form.name' => 'required|string|max:120',
@@ -106,35 +104,54 @@ class PrioritiesManager extends Component
 
         $this->showForm = false;
         $this->editing = null;
-        session()->flash('status', 'Prioridade salva com sucesso.');
+        $this->dispatch('sweet-alert', [
+            'type' => 'success',
+            'title' => 'Prioridade salva',
+            'toast' => true,
+        ]);
     }
 
     public function confirmDelete(int $priorityId): void
     {
-        $this->priorityIdBeingDeleted = $priorityId;
-        $this->showDeleteConfirm = true;
+        $this->dispatch('sweet-confirm', [
+            'title' => 'Remover prioridade?',
+            'text' => 'Esta ação não pode ser desfeita.',
+            'icon' => 'warning',
+            'confirmButtonText' => 'Remover',
+            'cancelButtonText' => 'Cancelar',
+            'callback' => 'deletePriority',
+            'payload' => ['priority_id' => $priorityId],
+            'componentId' => $this->getId(),
+        ]);
     }
 
-    public function delete(): void
+    public function deletePriority($payload = null): void
     {
-        if (!$this->priorityIdBeingDeleted) {
+        $priorityId = is_array($payload) ? ($payload['priority_id'] ?? null) : $payload;
+        if (!$priorityId) {
             return;
         }
 
-        $priority = Priority::find($this->priorityIdBeingDeleted);
+        $priority = Priority::find($priorityId);
 
         if ($priority) {
             if ($priority->is_default) {
-                $this->addError('delete', 'Defina outra prioridade como padrão antes de remover esta.');
+                $this->dispatch('sweet-alert', [
+                    'type' => 'error',
+                    'title' => 'Não é possível remover',
+                    'text' => 'Defina outra prioridade como padrão antes da remoção.',
+                ]);
                 return;
             }
 
             $priority->delete();
         }
 
-        $this->showDeleteConfirm = false;
-        $this->priorityIdBeingDeleted = null;
-        session()->flash('status', 'Prioridade removida.');
+        $this->dispatch('sweet-alert', [
+            'type' => 'success',
+            'title' => 'Prioridade removida',
+            'toast' => true,
+        ]);
     }
 
     public function toggleActive(int $priorityId): void
@@ -142,6 +159,12 @@ class PrioritiesManager extends Component
         $priority = Priority::findOrFail($priorityId);
         $priority->active = !$priority->active;
         $priority->save();
+
+        $this->dispatch('sweet-alert', [
+            'type' => 'success',
+            'title' => $priority->active ? 'Prioridade ativada' : 'Prioridade desativada',
+            'toast' => true,
+        ]);
     }
 
     public function markDefault(int $priorityId): void
@@ -153,6 +176,12 @@ class PrioritiesManager extends Component
         Priority::query()
             ->whereKeyNot($priorityId)
             ->update(['is_default' => false]);
+
+        $this->dispatch('sweet-alert', [
+            'type' => 'success',
+            'title' => 'Prioridade definida como padrão',
+            'toast' => true,
+        ]);
     }
 
     public function cancel(): void

@@ -30,6 +30,12 @@ return new class extends Migration
                 ->nullOnDelete();
         });
 
+        if (Schema::hasColumn('tickets', 'priority_id')) {
+            Schema::table('tickets', function (Blueprint $table) {
+                $table->index('priority_id');
+            });
+        }
+
         $mapping = DB::table('priorities')->pluck('id', 'slug');
 
         DB::table('tickets')->orderBy('id')->chunkById(500, function ($tickets) use ($mapping, $defaultPriorityId) {
@@ -68,6 +74,10 @@ return new class extends Migration
                     ->update(['priority' => $slug]);
             }
         });
+
+        if (Schema::hasColumn('tickets', 'priority_id')) {
+            DB::statement('DROP INDEX IF EXISTS tickets_priority_id_index');
+        }
 
         Schema::table('tickets', function (Blueprint $table) {
             $table->dropForeign(['priority_id']);
