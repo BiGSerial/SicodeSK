@@ -114,6 +114,12 @@
                 <div class="rounded-lg border border-[#2b3649] bg-[#0f172a] p-6">
                     @php
                         $currentArea = $selectedArea ? $areas->firstWhere('id', $selectedArea) : null;
+                        $scopeKey = $scopeContext['key'] ?? 'type:0|cat:0|sub:0';
+                        $scopeSelection = [
+                            'ticket_type_id' => $scopeContext['ticket_type_id'] ?? null,
+                            'category_id' => $scopeContext['category_id'] ?? null,
+                            'subcategory_id' => $scopeContext['subcategory_id'] ?? null,
+                        ];
                     @endphp
 
                     @if (!$currentArea)
@@ -158,6 +164,7 @@
                                         <th class="px-4 py-2 text-left">Executor</th>
                                         <th class="px-4 py-2 text-left">Email</th>
                                         <th class="px-4 py-2 text-left">Função</th>
+                                        <th class="px-4 py-2 text-left">Escopo</th>
                                         <th class="px-4 py-2 text-right">Ações</th>
                                     </tr>
                                 </thead>
@@ -166,7 +173,29 @@
                                         <tr class="border-b border-[#2b3649]">
                                             <td class="px-4 py-3 text-zinc-200">{{ $executor->name }}</td>
                                             <td class="px-4 py-3 text-zinc-400">{{ $executor->email }}</td>
-                                            <td class="px-4 py-3 text-zinc-400">{{ ucfirst($executor->pivot->role_in_area ?? 'member') }}</td>
+                                            <td class="px-4 py-3 text-zinc-300">
+                                                <select wire:change="setExecutorRole('{{ $executor->id }}', $event.target.value)"
+                                                    class="w-36 rounded border border-[#334155] bg-[#0f172a] px-2 py-1.5 text-xs text-zinc-100">
+                                                    @foreach ($areaRoleOptions as $value => $label)
+                                                        <option value="{{ $value }}" @selected(($executor->role ?? 'member') === $value)>
+                                                            {{ $label }}
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                            </td>
+                                            <td class="px-4 py-3 text-zinc-300">
+                                                <div class="flex flex-wrap gap-1">
+                                                    @forelse ($executor->scopes ?? [] as $scope)
+                                                        <span class="inline-flex items-center gap-1 rounded-full bg-[#1a2536] px-2 py-1 text-[11px] text-zinc-200">
+                                                            {{ $scope['label'] }}
+                                                            <button type="button" wire:click="removeScope({{ $scope['id'] }})"
+                                                                class="text-[10px] text-rose-300 hover:text-rose-200">×</button>
+                                                        </span>
+                                                    @empty
+                                                        <span class="text-[11px] text-zinc-500">Sem escopo atribuído</span>
+                                                    @endforelse
+                                                </div>
+                                            </td>
                                             <td class="px-4 py-3 text-right">
                                                 <button wire:click="removeExecutor('{{ $executor->id }}')"
                                                     class="text-xs text-rose-300 hover:underline">Remover</button>
@@ -175,13 +204,144 @@
                                     @endforeach
                                     @if (($currentArea->executors_list ?? collect())->isEmpty())
                                         <tr>
-                                            <td colspan="4" class="px-4 py-6 text-center text-xs text-zinc-500">
+                                            <td colspan="5" class="px-4 py-6 text-center text-xs text-zinc-500">
                                                 Nenhum executor vinculado ainda.
                                             </td>
                                         </tr>
                                     @endif
                                 </tbody>
                             </table>
+                        </div>
+
+                        <div class="mt-6 rounded-lg border border-[#2b3649] bg-[#121a2a] p-5">
+                            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <div>
+                                    <h4 class="text-sm font-semibold text-zinc-100">Distribuição por especialidade</h4>
+                                    <p class="text-[11px] text-zinc-500">Selecione o recorte de atendimento e marque quem deve receber os chamados automaticamente.</p>
+                                </div>
+                                <button type="button" wire:click="clearScopeSelection"
+                                    class="self-start rounded border border-[#2b3649] px-3 py-1.5 text-[11px] text-zinc-300 hover:bg-[#1a2436]">
+                                    Limpar filtros
+                                </button>
+                            </div>
+
+                            <div class="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-4">
+                                <div>
+                                    <label class="mb-1 block text-[11px] uppercase tracking-wide text-zinc-500">Tipo de ticket</label>
+                                    <select wire:model.live="scopeTicketTypeId"
+                                        class="w-full rounded border border-[#334155] bg-[#0f172a] px-3 py-2 text-zinc-100">
+                                        <option value="">Todos os tipos</option>
+                                        @foreach ($currentArea->ticket_types as $type)
+                                            <option value="{{ $type['id'] }}">{{ $type['name'] }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-[11px] uppercase tracking-wide text-zinc-500">Categoria</label>
+                                    <select wire:model.live="scopeCategoryId"
+                                        class="w-full rounded border border-[#334155] bg-[#0f172a] px-3 py-2 text-zinc-100">
+                                        <option value="">Todas as categorias</option>
+                                        @foreach ($currentArea->categories as $category)
+                                            @php
+                                                $matchesType = !$scopeSelection['ticket_type_id'] || ($category['ticket_type_id'] ?? null) === $scopeSelection['ticket_type_id'];
+                                            @endphp
+                                            @if ($matchesType)
+                                                <option value="{{ $category['id'] }}">{{ $category['name'] }}</option>
+                                            @endif
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-[11px] uppercase tracking-wide text-zinc-500">Subcategoria</label>
+                                    <select wire:model.live="scopeSubcategoryId"
+                                        class="w-full rounded border border-[#334155] bg-[#0f172a] px-3 py-2 text-zinc-100">
+                                        <option value="">Todas as subcategorias</option>
+                                        @foreach ($currentArea->categories as $category)
+                                            @php
+                                                $matchesType = !$scopeSelection['ticket_type_id'] || ($category['ticket_type_id'] ?? null) === $scopeSelection['ticket_type_id'];
+                                                $matchesCategory = !$scopeSelection['category_id'] || $scopeSelection['category_id'] === $category['id'];
+                                            @endphp
+                                            @if ($matchesType && $matchesCategory)
+                                                @foreach ($category['subcategories'] as $sub)
+                                                    <option value="{{ $sub['id'] }}">{{ $sub['name'] }}</option>
+                                                @endforeach
+                                            @endif
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+
+                            @php
+                                $scopeSummary = 'Todos os tipos da área';
+                                $typeLookup = collect($currentArea->ticket_types);
+                                $categoryLookup = collect($currentArea->categories);
+
+                                if ($scopeSelection['subcategory_id']) {
+                                    $category = $categoryLookup->firstWhere('id', $scopeSelection['category_id']);
+                                    $type = $typeLookup->firstWhere('id', $scopeSelection['ticket_type_id']);
+                                    $subcategory = $category ? collect($category['subcategories'])->firstWhere('id', $scopeSelection['subcategory_id']) : null;
+
+                                    if ($category && $subcategory) {
+                                        $scopeSummary = sprintf('%s • %s › %s', $type['name'] ?? 'Tipo', $category['name'], $subcategory['name']);
+                                    }
+                                } elseif ($scopeSelection['category_id']) {
+                                    $category = $categoryLookup->firstWhere('id', $scopeSelection['category_id']);
+                                    $type = $typeLookup->firstWhere('id', $scopeSelection['ticket_type_id']);
+
+                                    if ($category) {
+                                        $scopeSummary = $type ? sprintf('%s • %s', $type['name'], $category['name']) : $category['name'];
+                                    }
+                                } elseif ($scopeSelection['ticket_type_id']) {
+                                    $type = $typeLookup->firstWhere('id', $scopeSelection['ticket_type_id']);
+                                    if ($type) {
+                                        $scopeSummary = $type['name'];
+                                    }
+                                }
+
+                                $assignedCount = collect($currentArea->executors_list ?? [])->filter(function ($executor) use ($scopeKey) {
+                                    return in_array($scopeKey, $executor->scope_keys ?? []);
+                                })->count();
+                            @endphp
+
+                            <p class="mt-4 text-xs text-zinc-400">
+                                Escopo atual: <span class="text-zinc-200">{{ $scopeSummary }}</span>
+                            </p>
+
+                            <div class="mt-4">
+                                @if (($currentArea->executors_list ?? collect())->isEmpty())
+                                    <p class="rounded border border-dashed border-[#2b3649] bg-[#101a2c] px-4 py-6 text-center text-xs text-zinc-500">
+                                        Cadastre executores na área para definir especialidades.
+                                    </p>
+                                @else
+                                    <div class="grid gap-2 md:grid-cols-2">
+                                        @foreach ($currentArea->executors_list ?? [] as $executor)
+                                            @php
+                                                $assigned = in_array($scopeKey, $executor->scope_keys ?? []);
+                                            @endphp
+                                            <button type="button" wire:click="toggleScopeAssignment('{{ $executor->id }}')"
+                                                class="flex items-center justify-between rounded-lg border px-3 py-2 text-left transition"
+                                                @class([
+                                                    'border-edp-iceblue-100 bg-edp-iceblue-100/10 text-edp-iceblue-100' => $assigned,
+                                                    'border-[#2b3649] bg-[#101a2c] text-zinc-200 hover:border-edp-iceblue-100/60' => ! $assigned,
+                                                ])>
+                                                <span>
+                                                    <span class="block text-sm font-medium">{{ $executor->name }}</span>
+                                                    <span class="block text-[11px] text-zinc-500">{{ $executor->email }}</span>
+                                                </span>
+                                                <span class="text-[11px] text-zinc-400">
+                                                    {{ $assigned ? 'Designado' : 'Adicionar' }}
+                                                </span>
+                                            </button>
+                                        @endforeach
+                                    </div>
+
+                                    @if ($assignedCount === 0)
+                                        <p class="mt-3 text-[11px] text-amber-300">
+                                            Nenhum executor ainda foi atribuído a este recorte.
+                                        </p>
+                                    @endif
+                                @endif
+                            </div>
                         </div>
                     @endif
                 </div>

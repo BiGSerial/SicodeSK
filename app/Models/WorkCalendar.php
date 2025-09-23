@@ -32,10 +32,10 @@ class WorkCalendar extends Model
 
     public function getDailySchedule(string $weekday): ?array
     {
-        $normalized = strtolower($weekday);
+        $normalized = $this->normalizeWeekdayKey($weekday);
         $workweek = $this->workweek ?? [];
 
-        if (!is_array($workweek) || empty($workweek[$normalized])) {
+        if (!$normalized || !is_array($workweek) || empty($workweek[$normalized])) {
             return null;
         }
 
@@ -56,6 +56,30 @@ class WorkCalendar extends Model
             'start' => $start,
             'end' => $end,
         ];
+    }
+
+    private function normalizeWeekdayKey(string $weekday): ?string
+    {
+        $map = [
+            'monday' => 'mon',
+            'mon' => 'mon',
+            'tuesday' => 'tue',
+            'tue' => 'tue',
+            'wednesday' => 'wed',
+            'wed' => 'wed',
+            'thursday' => 'thu',
+            'thu' => 'thu',
+            'friday' => 'fri',
+            'fri' => 'fri',
+            'saturday' => 'sat',
+            'sat' => 'sat',
+            'sunday' => 'sun',
+            'sun' => 'sun',
+        ];
+
+        $normalized = strtolower($weekday);
+
+        return $map[$normalized] ?? null;
     }
 
     public function isHoliday(\DateTimeInterface $date): bool

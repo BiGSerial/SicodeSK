@@ -64,4 +64,9 @@ class Area extends Model
             ->withPivot('role_in_area')
             ->withTimestamps();
     }
+
+    public function executorScopes(): HasMany
+    {
+        return $this->hasMany(AreaUserScope::class);
+    }
 }

@@ -21,18 +21,54 @@ class Roles extends Component
     public ?array $selectedUser = null;
     public array $formRoles = [];
 
-    /** @var array<string,string> */
-    public array $roleLabels = [
-        AuthorizationService::ROLE_REQUESTER => 'Solicitante',
-        AuthorizationService::ROLE_AGENT => 'Agente',
-        AuthorizationService::ROLE_AREA_MANAGER => 'Gestor de área',
-        AuthorizationService::ROLE_GLOBAL_MANAGER => 'Gestor geral',
-        AuthorizationService::ROLE_ADMIN => 'Administrador',
+    /**
+     * Informações de apoio para cada perfil disponível.
+     *
+     * @var array<string, array<string, mixed>>
+     */
+    public array $roleGuides = [
+        AuthorizationService::ROLE_REQUESTER => [
+            'name' => 'Solicitante',
+            'summary' => 'Abre tickets e acompanha somente as próprias solicitações.',
+            'badge' => 'Perfil base de todos os usuários',
+            'icon' => '📝',
+            'locked' => true,
+        ],
+        AuthorizationService::ROLE_AGENT => [
+            'name' => 'Agente',
+            'summary' => 'Atua nos tickets atribuídos como executor e registra interações.',
+            'badge' => 'Precisa estar vinculado a uma área',
+            'icon' => '🛠️',
+        ],
+        AuthorizationService::ROLE_AREA_MANAGER => [
+            'name' => 'Gestor de área',
+            'summary' => 'Enxerga e distribui tickets das áreas sob sua responsabilidade.',
+            'badge' => 'Define prioridades e aprovações locais',
+            'icon' => '📍',
+        ],
+        AuthorizationService::ROLE_GLOBAL_MANAGER => [
+            'name' => 'Gestor geral',
+            'summary' => 'Acompanha indicadores e tickets de todas as áreas.',
+            'badge' => 'Visão consolidada do atendimento',
+            'icon' => '🌐',
+        ],
+        AuthorizationService::ROLE_ADMIN => [
+            'name' => 'Administrador',
+            'summary' => 'Configura cadastros, workflows, SLAs e políticas do sistema.',
+            'badge' => 'Acesso completo',
+            'icon' => '⚙️',
+        ],
     ];
+
+    /** @var array<string,string> */
+    public array $roleLabels = [];
 
     public function mount(): void
     {
         $this->ensureAdminAccess();
+        $this->roleLabels = collect($this->roleGuides)
+            ->mapWithKeys(fn ($guide, $slug) => [$slug => $guide['name']])
+            ->toArray();
         $this->resetState();
     }
 
@@ -175,7 +211,15 @@ class Roles extends Component
 
     public function render()
     {
-        return view('livewire.admin.roles');
+        $roleStats = Role::query()
+            ->withCount('users')
+            ->get()
+            ->mapWithKeys(fn (Role $role) => [$role->slug => $role->users_count])
+            ->toArray();
+
+        return view('livewire.admin.roles', [
+            'roleStats' => $roleStats,
+        ]);
     }
 
     private function searchUsers(): void

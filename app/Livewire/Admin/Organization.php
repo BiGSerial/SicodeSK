@@ -4,8 +4,10 @@ namespace App\Livewire\Admin;
 
 use App\Livewire\Concerns\ChecksAdminAccess;
 use App\Models\Area;
+use App\Models\Category;
 use App\Models\SicodeUser;
-use Illuminate\Support\Collection;
+use App\Models\Subcategory;
+use App\Models\TicketType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -32,6 +34,18 @@ class Organization extends Component
     public string $executorSearch = '';
     public array $executorResults = [];
 
+    /** @var array<string,string> */
+    public array $areaRoleOptions = [
+        'member' => 'Executor',
+        'triage' => 'Triagem',
+        'approver' => 'Aprovador',
+        'viewer' => 'Observador',
+    ];
+
+    public ?int $scopeTicketTypeId = null;
+    public ?int $scopeCategoryId = null;
+    public ?int $scopeSubcategoryId = null;
+
     public function mount(): void
     {
         $this->ensureAdminAccess();
@@ -44,52 +58,159 @@ class Organization extends Component
             ->orderBy('name')
             ->get(['id', 'name', 'sigla', 'active', 'manager_sicode_id']);
 
-        $areas = $areas->map(function ($area) {
-            $executorIds = DB::table('area_user')
-                ->where('area_id', $area->id)
-                ->pluck('sicode_id');
+        $areaIds = $areas->pluck('id');
 
-            $area->executors_list = $executorIds->isEmpty()
-                ? collect()
-                : SicodeUser::query()
-                    ->whereIn('id', $executorIds)
-                    ->orderBy('name')
-                    ->get(['id', 'name', 'email'])
-                    ->map(function ($user) use ($area) {
-                        $pivot = DB::table('area_user')
-                            ->where('area_id', $area->id)
-                            ->where('sicode_id', $user->id)
-                            ->first();
+        $pivotRows = $areaIds->isEmpty()
+            ? collect()
+            : DB::table('area_user')
+                ->whereIn('area_id', $areaIds)
+                ->select('id', 'area_id', 'sicode_id', 'role_in_area', 'created_at')
+                ->orderBy('created_at')
+                ->get();
 
-                        $user->pivot = (object) [
-                            'role_in_area' => $pivot->role_in_area ?? 'member',
+        $scopeRows = $areaIds->isEmpty()
+            ? collect()
+            : DB::table('area_user_scopes')
+                ->whereIn('area_id', $areaIds)
+                ->select('id', 'area_id', 'sicode_id', 'ticket_type_id', 'category_id', 'subcategory_id')
+                ->get();
+
+        $userIds = $pivotRows->pluck('sicode_id')->filter()->unique();
+
+        $users = $userIds->isEmpty()
+            ? collect()
+            : SicodeUser::query()
+                ->whereIn('id', $userIds)
+                ->orderBy('name')
+                ->get(['id', 'name', 'email'])
+                ->keyBy('id');
+
+        $ticketTypeList = $areaIds->isEmpty()
+            ? collect()
+            : TicketType::query()
+                ->whereIn('area_id', $areaIds)
+                ->orderBy('name')
+                ->get(['id', 'area_id', 'name']);
+
+        $categoryList = $areaIds->isEmpty()
+            ? collect()
+            : Category::query()
+                ->whereIn('area_id', $areaIds)
+                ->orderBy('name')
+                ->get(['id', 'area_id', 'ticket_type_id', 'name']);
+
+        $subcategoryList = $categoryList->isEmpty()
+            ? collect()
+            : Subcategory::query()
+                ->whereIn('category_id', $categoryList->pluck('id'))
+                ->orderBy('name')
+                ->get(['id', 'category_id', 'name']);
+
+        $ticketTypesByArea = $ticketTypeList->groupBy('area_id');
+        $categoriesByArea = $categoryList->groupBy('area_id');
+        $subcategoriesByCategory = $subcategoryList->groupBy('category_id');
+
+        $typeNameMap = $ticketTypeList->pluck('name', 'id')->all();
+        $categoryNameMap = $categoryList->pluck('name', 'id')->all();
+        $subcategoryNameMap = $subcategoryList->pluck('name', 'id')->all();
+
+        $categoryToType = $categoryList->mapWithKeys(fn ($category) => [$category->id => $category->ticket_type_id])->all();
+        $subcategoryToCategory = $subcategoryList->mapWithKeys(fn ($subcategory) => [$subcategory->id => $subcategory->category_id])->all();
+
+        $pivotByArea = $pivotRows->groupBy('area_id');
+        $scopesByArea = $scopeRows->groupBy('area_id');
+
+        $self = $this;
+
+        $areas = $areas->map(function ($area) use ($pivotByArea, $users, $scopesByArea, $ticketTypesByArea, $categoriesByArea, $subcategoriesByCategory, $typeNameMap, $categoryNameMap, $subcategoryNameMap, $categoryToType, $subcategoryToCategory, $self) {
+            $areaPivots = $pivotByArea->get($area->id, collect());
+            $areaScopes = $scopesByArea->get($area->id, collect())->groupBy('sicode_id');
+
+            $area->setAttribute('ticket_types', $ticketTypesByArea->get($area->id, collect())
+                ->map(fn ($type) => [
+                    'id' => $type->id,
+                    'name' => $type->name,
+                ])->values()->all());
+
+            $area->setAttribute('categories', $categoriesByArea->get($area->id, collect())
+                ->map(function ($category) use ($subcategoriesByCategory) {
+                    return [
+                        'id' => $category->id,
+                        'name' => $category->name,
+                        'ticket_type_id' => $category->ticket_type_id,
+                        'subcategories' => $subcategoriesByCategory->get($category->id, collect())
+                            ->map(fn ($sub) => [
+                                'id' => $sub->id,
+                                'name' => $sub->name,
+                            ])->values()->all(),
+                    ];
+                })->values()->all());
+
+            $executors = $areaPivots->map(function ($pivot) use ($users, $areaScopes, $typeNameMap, $categoryNameMap, $subcategoryNameMap, $categoryToType, $subcategoryToCategory, $self) {
+                $user = $users->get($pivot->sicode_id);
+
+                if (!$user) {
+                    return null;
+                }
+
+                $scopes = $areaScopes->get($pivot->sicode_id, collect())
+                    ->map(function ($scope) use ($typeNameMap, $categoryNameMap, $subcategoryNameMap, $categoryToType, $subcategoryToCategory, $self) {
+                        $ticketTypeId = $scope->ticket_type_id ? (int) $scope->ticket_type_id : null;
+                        $categoryId = $scope->category_id ? (int) $scope->category_id : null;
+                        $subcategoryId = $scope->subcategory_id ? (int) $scope->subcategory_id : null;
+
+                        [$normalizedType, $normalizedCategory, $normalizedSubcategory] = $self->normalizeScopeValues(
+                            $ticketTypeId,
+                            $categoryId,
+                            $subcategoryId,
+                            $categoryToType,
+                            $subcategoryToCategory
+                        );
+
+                        return [
+                            'id' => $scope->id,
+                            'ticket_type_id' => $normalizedType,
+                            'category_id' => $normalizedCategory,
+                            'subcategory_id' => $normalizedSubcategory,
+                            'label' => $self->formatScopeLabel($normalizedType, $normalizedCategory, $normalizedSubcategory, $typeNameMap, $categoryNameMap, $subcategoryNameMap),
+                            'key' => $self->makeScopeKey($normalizedType, $normalizedCategory, $normalizedSubcategory),
                         ];
+                    })->values()->all();
 
-                        return $user;
-                    });
+                return (object) [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $pivot->role_in_area ?? 'member',
+                    'scopes' => $scopes,
+                    'scope_keys' => array_map(fn ($scope) => $scope['key'], $scopes),
+                ];
+            })->filter()->values();
+
+            $area->setAttribute('executors_list', $executors);
 
             return $area;
         });
 
+        [$normalizedType, $normalizedCategory, $normalizedSubcategory] = $this->normalizeScopeValues(
+            $this->scopeTicketTypeId ? (int) $this->scopeTicketTypeId : null,
+            $this->scopeCategoryId ? (int) $this->scopeCategoryId : null,
+            $this->scopeSubcategoryId ? (int) $this->scopeSubcategoryId : null,
+            $categoryToType,
+            $subcategoryToCategory
+        );
+
+        $scopeKey = $this->makeScopeKey($normalizedType, $normalizedCategory, $normalizedSubcategory);
+
         return view('livewire.admin.organization', [
             'areas' => $areas,
-            'teams' => $this->teamsForSelectedArea($areas),
+            'scopeContext' => [
+                'key' => $scopeKey,
+                'ticket_type_id' => $normalizedType,
+                'category_id' => $normalizedCategory,
+                'subcategory_id' => $normalizedSubcategory,
+            ],
         ]);
-    }
-
-    private function teamsForSelectedArea(Collection $areas): Collection
-    {
-        if (!$this->selectedArea) {
-            return collect();
-        }
-
-        $area = $areas->firstWhere('id', $this->selectedArea);
-
-        if (!$area) {
-            return collect();
-        }
-
-        return collect([]);
     }
 
     public function toggleAreaForm(): void
@@ -110,6 +231,9 @@ class Organization extends Component
         $this->selectedArea = $areaId;
         $this->executorResults = [];
         $this->executorSearch = '';
+        $this->scopeTicketTypeId = null;
+        $this->scopeCategoryId = null;
+        $this->scopeSubcategoryId = null;
     }
 
     public function saveArea(): void
@@ -211,9 +335,200 @@ class Organization extends Component
             ->where('sicode_id', $sicodeId)
             ->delete();
 
+        DB::table('area_user_scopes')
+            ->where('area_id', $this->selectedArea)
+            ->where('sicode_id', $sicodeId)
+            ->delete();
+
         $this->dispatch('sweet-alert', [
             'type' => 'success',
             'title' => 'Executor removido da área.',
+            'toast' => true,
+        ]);
+    }
+
+    public function setExecutorRole(string $sicodeId, string $role): void
+    {
+        if (!$this->selectedArea) {
+            return;
+        }
+
+        if (!array_key_exists($role, $this->areaRoleOptions)) {
+            return;
+        }
+
+        $updated = DB::table('area_user')
+            ->where('area_id', $this->selectedArea)
+            ->where('sicode_id', $sicodeId)
+            ->update([
+                'role_in_area' => $role,
+                'updated_at' => now(),
+            ]);
+
+        if ($updated) {
+            $this->dispatch('sweet-alert', [
+                'type' => 'success',
+                'title' => 'Função atualizada.',
+                'toast' => true,
+            ]);
+        }
+    }
+
+    public function updatedScopeTicketTypeId($value): void
+    {
+        $this->scopeTicketTypeId = $value !== '' ? (int) $value : null;
+        $this->scopeCategoryId = null;
+        $this->scopeSubcategoryId = null;
+    }
+
+    public function updatedScopeCategoryId($value): void
+    {
+        if (!$this->selectedArea) {
+            $this->scopeCategoryId = null;
+            $this->scopeSubcategoryId = null;
+            return;
+        }
+
+        $categoryId = $value !== '' ? (int) $value : null;
+
+        if (!$categoryId) {
+            $this->scopeCategoryId = null;
+            $this->scopeSubcategoryId = null;
+            return;
+        }
+
+        $category = Category::find($categoryId);
+
+        if (!$category || $category->area_id !== $this->selectedArea) {
+            $this->scopeCategoryId = null;
+            $this->scopeSubcategoryId = null;
+            return;
+        }
+
+        $this->scopeCategoryId = $categoryId;
+        $this->scopeSubcategoryId = null;
+
+        if ($category->ticket_type_id) {
+            $this->scopeTicketTypeId = $category->ticket_type_id;
+        }
+    }
+
+    public function updatedScopeSubcategoryId($value): void
+    {
+        if (!$this->selectedArea) {
+            $this->scopeSubcategoryId = null;
+            return;
+        }
+
+        $subcategoryId = $value !== '' ? (int) $value : null;
+
+        if (!$subcategoryId) {
+            $this->scopeSubcategoryId = null;
+            return;
+        }
+
+        $subcategory = Subcategory::find($subcategoryId);
+
+        if (!$subcategory) {
+            $this->scopeSubcategoryId = null;
+            return;
+        }
+
+        $category = Category::find($subcategory->category_id);
+
+        if (!$category || $category->area_id !== $this->selectedArea) {
+            $this->scopeSubcategoryId = null;
+            return;
+        }
+
+        $this->scopeSubcategoryId = $subcategoryId;
+        $this->scopeCategoryId = $category->id;
+
+        if ($category->ticket_type_id) {
+            $this->scopeTicketTypeId = $category->ticket_type_id;
+        }
+    }
+
+    public function clearScopeSelection(): void
+    {
+        $this->scopeTicketTypeId = null;
+        $this->scopeCategoryId = null;
+        $this->scopeSubcategoryId = null;
+    }
+
+    public function toggleScopeAssignment(string $sicodeId): void
+    {
+        if (!$this->selectedArea) {
+            return;
+        }
+
+        $exists = DB::table('area_user')
+            ->where('area_id', $this->selectedArea)
+            ->where('sicode_id', $sicodeId)
+            ->exists();
+
+        if (!$exists) {
+            $this->dispatch('sweet-alert', [
+                'type' => 'error',
+                'title' => 'Vincule o executor à área antes de atribuir escopos.',
+                'toast' => true,
+            ]);
+            return;
+        }
+
+        [$ticketTypeId, $categoryId, $subcategoryId] = $this->normalizedScopeSelection();
+
+        $key = [
+            'area_id' => $this->selectedArea,
+            'sicode_id' => $sicodeId,
+            'ticket_type_id' => $ticketTypeId,
+            'category_id' => $categoryId,
+            'subcategory_id' => $subcategoryId,
+        ];
+
+        $existing = DB::table('area_user_scopes')->where($key)->first();
+
+        if ($existing) {
+            DB::table('area_user_scopes')->where('id', $existing->id)->delete();
+
+            $this->dispatch('sweet-alert', [
+                'type' => 'info',
+                'title' => 'Escopo removido do executor.',
+                'toast' => true,
+            ]);
+
+            return;
+        }
+
+        DB::table('area_user_scopes')->insert(array_merge($key, [
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]));
+
+        $this->dispatch('sweet-alert', [
+            'type' => 'success',
+            'title' => 'Escopo atribuído ao executor.',
+            'toast' => true,
+        ]);
+    }
+
+    public function removeScope(int $scopeId): void
+    {
+        if (!$this->selectedArea) {
+            return;
+        }
+
+        $scope = DB::table('area_user_scopes')->where('id', $scopeId)->first();
+
+        if (!$scope || (int) $scope->area_id !== $this->selectedArea) {
+            return;
+        }
+
+        DB::table('area_user_scopes')->where('id', $scopeId)->delete();
+
+        $this->dispatch('sweet-alert', [
+            'type' => 'info',
+            'title' => 'Escopo removido.',
             'toast' => true,
         ]);
     }
@@ -228,6 +543,99 @@ class Organization extends Component
         ];
         $this->managerSearch = '';
         $this->managerResults = [];
+    }
+
+    private function normalizedScopeSelection(): array
+    {
+        if (!$this->selectedArea) {
+            return [null, null, null];
+        }
+
+        $ticketTypeId = $this->scopeTicketTypeId ? (int) $this->scopeTicketTypeId : null;
+        $categoryId = $this->scopeCategoryId ? (int) $this->scopeCategoryId : null;
+        $subcategoryId = $this->scopeSubcategoryId ? (int) $this->scopeSubcategoryId : null;
+
+        if ($subcategoryId) {
+            $subcategory = Subcategory::find($subcategoryId);
+
+            if (!$subcategory) {
+                $subcategoryId = null;
+            } else {
+                $categoryId = $subcategory->category_id;
+            }
+        }
+
+        if ($categoryId) {
+            $category = Category::find($categoryId);
+
+            if (!$category || $category->area_id !== $this->selectedArea) {
+                $categoryId = null;
+                $subcategoryId = null;
+            } else {
+                $ticketTypeId = $category->ticket_type_id ?: $ticketTypeId;
+            }
+        }
+
+        if ($ticketTypeId) {
+            $type = TicketType::find($ticketTypeId);
+
+            if (!$type || $type->area_id !== $this->selectedArea) {
+                $ticketTypeId = null;
+            }
+        }
+
+        return [$ticketTypeId, $categoryId, $subcategoryId];
+    }
+
+    private function normalizeScopeValues(?int $ticketTypeId, ?int $categoryId, ?int $subcategoryId, array $categoryToType, array $subcategoryToCategory): array
+    {
+        if ($subcategoryId && isset($subcategoryToCategory[$subcategoryId])) {
+            $categoryId = $subcategoryToCategory[$subcategoryId];
+        }
+
+        if ($categoryId && isset($categoryToType[$categoryId])) {
+            $ticketTypeId = $categoryToType[$categoryId];
+        }
+
+        return [$ticketTypeId, $categoryId, $subcategoryId];
+    }
+
+    private function makeScopeKey(?int $ticketTypeId, ?int $categoryId, ?int $subcategoryId): string
+    {
+        return sprintf('type:%s|cat:%s|sub:%s', $ticketTypeId ?? '0', $categoryId ?? '0', $subcategoryId ?? '0');
+    }
+
+    private function formatScopeLabel(
+        ?int $ticketTypeId,
+        ?int $categoryId,
+        ?int $subcategoryId,
+        array $typeNames,
+        array $categoryNames,
+        array $subcategoryNames
+    ): string {
+        if ($subcategoryId && isset($subcategoryNames[$subcategoryId])) {
+            $typeLabel = $ticketTypeId && isset($typeNames[$ticketTypeId]) ? $typeNames[$ticketTypeId] : 'Tipo';
+            $categoryLabel = $categoryId && isset($categoryNames[$categoryId]) ? $categoryNames[$categoryId] : 'Categoria';
+            $subcategoryLabel = $subcategoryNames[$subcategoryId];
+
+            return sprintf('%s • %s › %s', $typeLabel, $categoryLabel, $subcategoryLabel);
+        }
+
+        if ($categoryId && isset($categoryNames[$categoryId])) {
+            $categoryLabel = $categoryNames[$categoryId];
+
+            if ($ticketTypeId && isset($typeNames[$ticketTypeId])) {
+                return sprintf('%s • %s', $typeNames[$ticketTypeId], $categoryLabel);
+            }
+
+            return $categoryLabel;
+        }
+
+        if ($ticketTypeId && isset($typeNames[$ticketTypeId])) {
+            return $typeNames[$ticketTypeId];
+        }
+
+        return 'Todos os tipos da área';
     }
 
     private function searchSicodeUsers(string $term, ?int $areaId = null): array
